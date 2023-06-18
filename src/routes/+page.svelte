@@ -1,9 +1,15 @@
 <script lang="ts">
-	import { greet } from 'dotatlas';
 	import { onMount } from 'svelte';
+	import Worker from '../worker?worker';
 
 	onMount(() => {
-		greet();
+		const handle = new Worker();
+		handle.onmessage = (m) => console.log(`worker: ${m.data}`);
+		handle.onerror = (e) => console.error(e);
+
+		const message = 'ping';
+		console.log(`main: ${message}`);
+		handle.postMessage(message);
 	});
 </script>
 
