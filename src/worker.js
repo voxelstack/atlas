@@ -1,6 +1,12 @@
-import init, { get } from '../dotatlas/dotatlas.js';
+import init, { attach } from '../dotatlas/dotatlas.js';
 
-onmessage = async () => {
+onmessage = async (message) => {
 	await init();
-	postMessage(get());
+
+	// TODO Move all glue to Rust.
+	const [action, payload] = message.data;
+	switch (action) {
+		case 'attach':
+			attach(payload.canvas);
+	}
 };
