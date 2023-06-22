@@ -1,52 +1,23 @@
-use std::f64;
+use rayon::prelude::*;
 use wasm_bindgen::prelude::*;
-use web_sys::{OffscreenCanvas, OffscreenCanvasRenderingContext2d};
+
+pub use wasm_bindgen_rayon::init_thread_pool;
 
 #[wasm_bindgen]
-pub fn attach(canvas: OffscreenCanvas) {
+pub fn crunch() -> u32 {
     console_error_panic_hook::set_once();
-
-    let context = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<OffscreenCanvasRenderingContext2d>()
-        .unwrap();
-
-    // https://rustwasm.github.io/wasm-bindgen/examples/2d-canvas.html
-    context.begin_path();
-
-    // Draw the outer circle.
-    context
-        .arc(75.0, 75.0, 50.0, 0.0, f64::consts::PI * 2.0)
-        .unwrap();
-
-    // Draw the mouth.
-    context.move_to(110.0, 75.0);
-    context.arc(75.0, 75.0, 35.0, 0.0, f64::consts::PI).unwrap();
-
-    // Draw the left eye.
-    context.move_to(65.0, 65.0);
-    context
-        .arc(60.0, 65.0, 5.0, 0.0, f64::consts::PI * 2.0)
-        .unwrap();
-
-    // Draw the right eye.
-    context.move_to(95.0, 65.0);
-    context
-        .arc(90.0, 65.0, 5.0, 0.0, f64::consts::PI * 2.0)
-        .unwrap();
-
-    context.stroke();
+    (0..1_001).into_par_iter().map(|x| x * x).sum::<u32>()
 }
 
 #[cfg(test)]
 mod tests {
     use wasm_bindgen_test::*;
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    use super::*;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
 
     #[wasm_bindgen_test]
     fn pass() {
-        assert_eq!(1, 1);
+        assert_eq!(crunch(), 333833500);
     }
 }

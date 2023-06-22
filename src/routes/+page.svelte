@@ -5,12 +5,7 @@
 	let canvas: HTMLCanvasElement;
 
 	onMount(() => {
-		const handle = new Worker();
-		handle.onmessage = (m) => console.log(`worker: ${m.data}`);
-		handle.onerror = (e) => console.error(e);
-
-		const offscreen = canvas.transferControlToOffscreen();
-		handle.postMessage(['attach', { canvas: offscreen }], [offscreen]);
+		new Worker();
 	});
 </script>
 

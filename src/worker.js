@@ -1,12 +1,6 @@
-import init, { attach } from '../dotatlas/dotatlas.js';
+import init, { initThreadPool, crunch } from '../dotatlas/dotatlas.js';
 
-onmessage = async (message) => {
-	await init();
+await init();
+await initThreadPool(navigator.hardwareConcurrency);
 
-	// TODO Move all glue to Rust.
-	const [action, payload] = message.data;
-	switch (action) {
-		case 'attach':
-			attach(payload.canvas);
-	}
-};
+console.log(crunch());
