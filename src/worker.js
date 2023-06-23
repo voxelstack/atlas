@@ -1,6 +1,6 @@
-import init, { initThreadPool, crunch } from '../dotatlas/dotatlas.js';
+import init, { initThreadPool, crunch, greet } from '$atlas/server/atlas_server.js';
 
 await init();
 await initThreadPool(navigator.hardwareConcurrency);
-
-console.log(crunch());
+console.log(`server: greet().id = ${greet().id}`);
+console.log(`server: crunch() = ${crunch()}`);

@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Worker from '../worker?worker';
+	import init, { greet } from '$atlas/client';
 
 	let canvas: HTMLCanvasElement;
 
-	onMount(() => {
+	onMount(async () => {
+		await init();
+		console.log(`client: greet().id = ${greet().id}`);
+
 		new Worker();
 	});
 </script>

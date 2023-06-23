@@ -35,14 +35,14 @@ export default defineConfig({
 	],
 	server: {
 		fs: {
-			allow: ['./dotatlas']
+			allow: ['./atlas']
 		},
 		watch: {
 			ignored: [
-				// Ignore wasm build result. build:wasm touches the reload trigger.
-				path.resolve(__dirname, './dotatlas/**'),
+				// Ignore wasm build result. build:atlas touches the reload trigger.
+				path.resolve(__dirname, './atlas/**'),
 				// Ignore Rust sources.
-				path.resolve(__dirname, './src/dotatlas/**'),
+				path.resolve(__dirname, './src/atlas/**'),
 				// Ignore Rust build result.
 				path.resolve(__dirname, './target/**')
 			]

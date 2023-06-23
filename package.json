@@ -5,11 +5,15 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
-		"build:wasm": "wasm-pack build --out-dir dotatlas --target web > .reload",
-		"test:wasm": "wasm-pack test --chrome --headless",
+		"build:atlas-server": "wasm-pack build --out-dir ../../../atlas/server --target web src/atlas/server > .reload",
+		"build:atlas-client": "wasm-pack build --out-dir ../../../atlas/client --target web src/atlas/client > .reload",
+		"build:atlas": "pnpm run build:atlas-server && pnpm run build:atlas-client",
+		"test:atlas-server": "wasm-pack test --chrome --headless src/atlas/server",
+		"test:atlas-client": "wasm-pack test --chrome --headless src/atlas/client",
+		"test:atlas": "pnpm run test:atlas-server && pnpm run test:atlas-client",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:wasm": "cargo check --target wasm32-unknown-unknown",
+		"check:atlas": "cargo check --target wasm32-unknown-unknown",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --plugin-search-dir . --check . && eslint .",
 		"format": "prettier --plugin-search-dir . --write ."
