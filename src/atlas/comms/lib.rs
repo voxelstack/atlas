@@ -4,9 +4,29 @@ use tokio::sync::mpsc;
 use wasm_bindgen::{prelude::*, JsValue};
 use web_sys::{MessageChannel, MessageEvent, Worker};
 
-#[wasm_bindgen(js_name = setPanicHook)]
-pub fn set_panic_hook() {
+#[wasm_bindgen(js_name = initOutput)]
+pub fn init_output() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+    #[cfg(feature = "loggers")]
+    {
+        if let Err(_) = fern::Dispatch::new()
+            .format(|out, message, record| {
+                out.finish(format_args!(
+                    "{} [{} {}:{}]",
+                    message,
+                    record.level(),
+                    record.file().unwrap_or("unknown"),
+                    record.line().unwrap_or(0),
+                ))
+            })
+            .level(log::LevelFilter::Trace)
+            .chain(fern::Output::call(console_log::log))
+            .apply()
+        {
+            web_sys::console::warn_1(&"Failed to initialize loggers.".into());
+        }
+    }
 }
 
 #[derive(Debug)]

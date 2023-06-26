@@ -5,8 +5,8 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
-		"build:atlas-server": "wasm-pack build --out-dir ../../../atlas/server --target web src/atlas/server > .reload",
-		"build:atlas-client": "wasm-pack build --out-dir ../../../atlas/client --target web src/atlas/client > .reload",
+		"build:atlas-server": "wasm-pack build --out-dir ../../../atlas/server --target web src/atlas/server -- --features loggers > .reload",
+		"build:atlas-client": "wasm-pack build --out-dir ../../../atlas/client --target web src/atlas/client -- --features loggers > .reload",
 		"build:atlas": "pnpm run build:atlas-server && pnpm run build:atlas-client",
 		"test:atlas-server": "wasm-pack test --chrome --headless src/atlas/server",
 		"test:atlas-client": "wasm-pack test --chrome --headless src/atlas/client",

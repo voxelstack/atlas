@@ -2,7 +2,7 @@ use atlas_comms::{ServerError, ServerMessage, ServerProxy};
 use wasm_bindgen::prelude::*;
 use web_sys::Worker;
 
-pub use atlas_comms::set_panic_hook;
+pub use atlas_comms::init_output;
 
 #[wasm_bindgen]
 pub struct AtlasClient {

@@ -1,4 +1,4 @@
-import init, { initThreadPool, setPanicHook, crunch } from '$atlas/server';
+import init, { initThreadPool, initOutput, crunch } from '$atlas/server';
 
 // Pretend we have a server doing this through a ClientProxy.
 onmessage = (m) => {
@@ -7,6 +7,6 @@ onmessage = (m) => {
 };
 
 await init();
-setPanicHook();
+initOutput();
 await initThreadPool(navigator.hardwareConcurrency);
 console.log(`worker::crunch() = ${crunch()}`);

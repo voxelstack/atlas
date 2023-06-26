@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 atlas-comms = { path = "../comms" }
+log = "0.4.19"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 
@@ -25,3 +26,6 @@ features = [
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"
+
+[features]
+loggers = ["atlas-comms/loggers"]

@@ -13,7 +13,11 @@ path = "lib.rs"
 [dependencies]
 async-trait = "0.1.68"
 console_error_panic_hook = "0.1.7"
+console_log = { version = "1.0.0", optional = true }
+fern = { version = "0.6.2", optional = true }
+humantime = {version = "2.1.0", optional = true }
 js-sys = "0.3.64"
+log = "0.4.19"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 
@@ -32,3 +36,6 @@ features = [
     "MessagePort",
     "Worker",
 ]
+
+[features]
+loggers = ["dep:console_log", "dep:fern", "dep:humantime"]

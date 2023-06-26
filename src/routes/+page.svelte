@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Worker from '../worker?worker';
-	import initWasm, { setPanicHook, AtlasClient, ServerMessage } from '$atlas/client';
+	import init, { initOutput, AtlasClient, ServerMessage } from '$atlas/client';
 
 	let surface: HTMLCanvasElement;
 
 	onMount(async () => {
-		await initWasm();
-		setPanicHook();
+		await init();
+		initOutput();
 
 		const atlas = new AtlasClient(new Worker());
 		try {
