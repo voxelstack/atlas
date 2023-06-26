@@ -1,13 +1,8 @@
-use atlas_comms::Message;
 use rayon::prelude::*;
 use wasm_bindgen::prelude::*;
 
+pub use atlas_comms::set_panic_hook;
 pub use wasm_bindgen_rayon::init_thread_pool;
-
-#[wasm_bindgen]
-pub fn greet() -> Message {
-    Message { id: 1 }
-}
 
 #[wasm_bindgen]
 pub fn crunch() -> u32 {
