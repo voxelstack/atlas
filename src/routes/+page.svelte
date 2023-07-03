@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Worker from '../worker?worker';
-	import init, { initOutput, AtlasClient, ServerMessage } from '$atlas/client';
+	import init, { initOutput, AtlasClient } from '$atlas/client';
+	import spawn from '$lib/spawner';
 
 	let surface: HTMLCanvasElement;
 
@@ -9,18 +10,11 @@
 		await init();
 		initOutput();
 
-		const atlas = new AtlasClient(new Worker());
-		try {
-			console.log('main->worker:', 'PING');
-			const res = (await atlas.ping()) as ServerMessage;
-			switch (res) {
-				case ServerMessage.Pong:
-					console.log('main<-worker:', 'PONG');
-					break;
-			}
-		} catch (e) {
-			console.error(e);
-		}
+		const server = await spawn(Worker);
+		const atlas = new AtlasClient(server);
+
+		let i = 0;
+		setInterval(() => atlas.send(`ping:${i++}`), 1000);
 	});
 </script>
 

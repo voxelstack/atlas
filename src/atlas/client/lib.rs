@@ -1,4 +1,4 @@
-use atlas_comms::{ServerError, ServerMessage, ServerProxy};
+use atlas_comms::{port::Port, Payload};
 use wasm_bindgen::prelude::*;
 use web_sys::Worker;
 
@@ -6,32 +6,21 @@ pub use atlas_comms::init_output;
 
 #[wasm_bindgen]
 pub struct AtlasClient {
-    server: ServerProxy,
+    _server: Worker,
+    port: Port,
 }
 
 #[wasm_bindgen]
 impl AtlasClient {
     #[wasm_bindgen(constructor)]
-    pub fn new(worker: Worker) -> Self {
+    pub fn new(server: Worker) -> Self {
         Self {
-            server: ServerProxy::wrap(worker),
+            _server: server.clone(),
+            port: Port::wrap(Box::new(server)),
         }
     }
 
-    pub async fn ping(&self) -> Result<ServerMessage, ServerError> {
-        self.server.ping().await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wasm_bindgen_test::*;
-
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
-
-    #[wasm_bindgen_test]
-    fn pass() {
-        assert_eq!(0, 0);
+    pub fn send(&self, message: String) {
+        self.port.send(Payload(message));
     }
 }
