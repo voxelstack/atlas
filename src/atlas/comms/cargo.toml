@@ -7,9 +7,6 @@ description = "Common code for atlas server/client communication."
 repository = "https://github.com/voxelstack/dotme"
 license-file = "../../../LICENSE"
 
-[lib]
-path = "lib.rs"
-
 [dependencies]
 async-trait = "0.1.68"
 console_error_panic_hook = "0.1.7"

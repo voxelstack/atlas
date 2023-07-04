@@ -8,7 +8,6 @@ repository = "https://github.com/voxelstack/dotme"
 license-file = "../../../LICENSE"
 
 [lib]
-path = "lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
