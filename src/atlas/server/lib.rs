@@ -1,4 +1,9 @@
-use atlas_comms::{port::Port, Payload};
+use atlas_comms::{
+    client::ClientMessage,
+    port::Port,
+    server::{ServerMessage, ServerResponse},
+    Payload,
+};
 use log::trace;
 use tokio::sync::mpsc::unbounded_channel;
 use wasm_bindgen::prelude::*;
@@ -29,12 +34,16 @@ impl AtlasServer {
         let listener = self
             .port
             .add_listener(Closure::new(move |event: MessageEvent| {
-                let payload: Payload = event.data().into();
-                tx.send(payload.0).expect("Server channel should be open.");
+                let payload: Payload<ClientMessage> = event.data().into();
+                trace!("server got: {:?}", payload);
+                tx.send(payload).expect("Server channel should be open.");
             }));
 
         while let Some(message) = rx.recv().await {
-            trace!("wasm server received: {}", message);
+            self.port.send(Payload {
+                id: message.id,
+                message: ServerResponse::Ok(ServerMessage::Ok),
+            })
         }
 
         listener.clear();

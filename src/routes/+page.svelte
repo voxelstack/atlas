@@ -12,9 +12,8 @@
 
 		const server = await spawn(Worker);
 		const atlas = new AtlasClient(server);
-
-		let i = 0;
-		setInterval(() => atlas.send(`ping:${i++}`), 1000);
+		await atlas.ping();
+		await atlas.attach(surface.transferControlToOffscreen());
 	});
 </script>
 

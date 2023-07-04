@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker};
 
@@ -74,7 +76,7 @@ impl<'a> Drop for Listener<'a> {
     }
 }
 
-pub trait Shareable: Into<(JsValue, Option<JsValue>)> + From<JsValue> {}
+pub trait Shareable: Into<(JsValue, Option<JsValue>)> + From<JsValue> + Debug {}
 
 pub struct Port(Box<dyn RawPort>);
 
