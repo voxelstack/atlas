@@ -69,3 +69,32 @@ pub fn init_output() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use atlas_comms_derive::Shareable;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum Message {
+        Ping,
+    }
+
+    #[wasm_bindgen_test]
+    fn plain_enum() {
+        let (data, transfer) = Message::Ping.into();
+        let recovered: Message = data.into();
+
+        assert_eq!(recovered, Message::Ping);
+        assert_eq!(transfer, None);
+    }
+
+    #[wasm_bindgen_test]
+    #[should_panic]
+    fn invalid_ident() {
+        let _: Message = JsValue::from("invalid").into();
+    }
+}

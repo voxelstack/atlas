@@ -9,6 +9,7 @@ license-file = "../../../LICENSE"
 
 [dependencies]
 async-trait = "0.1.68"
+atlas-comms-derive = { path = "../comms_derive" }
 console_error_panic_hook = "0.1.7"
 console_log = { version = "1.0.0", optional = true }
 fern = { version = "0.6.2", optional = true }
@@ -34,6 +35,9 @@ features = [
     "OffscreenCanvas",
     "Worker",
 ]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.37"
 
 [features]
 loggers = ["dep:console_log", "dep:fern", "dep:humantime"]
