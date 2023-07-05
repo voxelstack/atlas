@@ -4,5 +4,6 @@ members = [
     "src/atlas/server",
 
     "src/atlas/comms",
+    "src/atlas/comms_derive",
 ]
 resolver = "2"
