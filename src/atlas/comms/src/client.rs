@@ -1,4 +1,4 @@
-use crate::port::Shareable;
+use crate::port::{Shareable, ShareableError};
 use wasm_bindgen::JsValue;
 use web_sys::OffscreenCanvas;
 
@@ -32,8 +32,10 @@ impl Into<(JsValue, Option<JsValue>)> for ClientMessage {
     }
 }
 
-impl From<JsValue> for ClientMessage {
-    fn from(value: JsValue) -> Self {
+impl TryFrom<JsValue> for ClientMessage {
+    type Error = ShareableError;
+
+    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         let value: js_sys::Array = value.into();
         let request = value
             .get(0)
@@ -41,12 +43,12 @@ impl From<JsValue> for ClientMessage {
             .expect("Message id should be a string.");
 
         match request.as_ref() {
-            "ping" => ClientMessage::Ping,
+            "ping" => Ok(ClientMessage::Ping),
             "attach" => {
                 let canvas = value.get(1).into();
-                ClientMessage::Attach(canvas)
+                Ok(ClientMessage::Attach(canvas))
             }
-            _ => panic!("Message id should be valid."),
+            _ => Err(ShareableError::InvalidIdentifier(request)),
         }
     }
 }

@@ -38,7 +38,7 @@ impl AtlasClient {
         let listener = self
             .port
             .add_listener(Closure::new(move |event: MessageEvent| {
-                let payload: Payload<ServerResponse> = event.data().into();
+                let payload: Payload<ServerResponse> = event.data().try_into().unwrap();
                 trace!("client got back: {:?}", payload);
 
                 if payload.id == id_clone {

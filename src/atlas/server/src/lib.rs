@@ -34,7 +34,7 @@ impl AtlasServer {
         let listener = self
             .port
             .add_listener(Closure::new(move |event: MessageEvent| {
-                let payload: Payload<ClientMessage> = event.data().into();
+                let payload: Payload<ClientMessage> = event.data().try_into().unwrap();
                 trace!("server got: {:?}", payload);
                 tx.send(payload).expect("Server channel should be open.");
             }));

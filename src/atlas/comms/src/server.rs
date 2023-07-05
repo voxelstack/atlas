@@ -1,4 +1,4 @@
-use crate::port::Shareable;
+use crate::port::{Shareable, ShareableError};
 use wasm_bindgen::JsValue;
 
 // TODO #[derive(Shareable)]
@@ -32,8 +32,10 @@ impl Into<(JsValue, Option<JsValue>)> for ServerMessage {
         }
     }
 }
-impl From<JsValue> for ServerMessage {
-    fn from(value: JsValue) -> Self {
+impl TryFrom<JsValue> for ServerMessage {
+    type Error = ShareableError;
+
+    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         let value: js_sys::Array = value.into();
         let request = value
             .get(0)
@@ -41,8 +43,8 @@ impl From<JsValue> for ServerMessage {
             .expect("Message id should be a string.");
 
         match request.as_ref() {
-            "ok" => ServerMessage::Ok,
-            _ => panic!("Message id should be valid."),
+            "ok" => Ok(ServerMessage::Ok),
+            _ => Err(ShareableError::InvalidIdentifier(request)),
         }
     }
 }
@@ -60,8 +62,10 @@ impl Into<(JsValue, Option<JsValue>)> for ServerError {
         }
     }
 }
-impl From<JsValue> for ServerError {
-    fn from(value: JsValue) -> Self {
+impl TryFrom<JsValue> for ServerError {
+    type Error = ShareableError;
+
+    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         let value: js_sys::Array = value.into();
         let request = value
             .get(0)
@@ -69,8 +73,8 @@ impl From<JsValue> for ServerError {
             .expect("Message id should be a string.");
 
         match request.as_ref() {
-            "unknown" => ServerError::Unknown,
-            _ => panic!("Message id should be valid."),
+            "unknown" => Ok(ServerError::Unknown),
+            _ => Err(ShareableError::InvalidIdentifier(request)),
         }
     }
 }
@@ -98,8 +102,10 @@ impl Into<(JsValue, Option<JsValue>)> for ServerResponse {
         }
     }
 }
-impl From<JsValue> for ServerResponse {
-    fn from(value: JsValue) -> Self {
+impl TryFrom<JsValue> for ServerResponse {
+    type Error = ShareableError;
+
+    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         let value: js_sys::Array = value.into();
         let payload_type = value
             .get(0)
@@ -108,9 +114,9 @@ impl From<JsValue> for ServerResponse {
         let payload = value.get(1);
 
         match payload_type.as_ref() {
-            "ok" => ServerResponse::Ok(payload.into()),
-            "err" => ServerResponse::Err(payload.into()),
-            _ => panic!("Payload type should be valid."),
+            "ok" => Ok(ServerResponse::Ok(payload.try_into()?)),
+            "err" => Ok(ServerResponse::Err(payload.try_into()?)),
+            _ => Err(ShareableError::InvalidIdentifier(payload_type)),
         }
     }
 }

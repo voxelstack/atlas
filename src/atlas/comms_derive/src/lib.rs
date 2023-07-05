@@ -21,7 +21,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let from_string = variants.iter().map(|v| {
         let variant = &v.ident;
-        quote! { stringify!(#variant) => #name::#variant }
+        quote! { stringify!(#variant) => std::result::Result::Ok(#name::#variant) }
     });
 
     let expanded = quote! {
@@ -35,15 +35,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl core::convert::From<wasm_bindgen::JsValue> for #name {
-            fn from(value: JsValue) -> Self {
+        impl core::convert::TryFrom<wasm_bindgen::JsValue> for #name {
+            type Error = crate::port::ShareableError;
+
+            fn try_from(value: JsValue) -> Result<Self, Self::Error> {
                 let ident = value.as_string().expect("Identifier should be a string.");
 
                 match ident.as_ref() {
                     #(#from_string,)*
-
-                    // TODO This should be a TryFrom instead.
-                    _ => panic!("Invalid identifier.")
+                    _ => std::result::Result::Err(crate::port::ShareableError::InvalidIdentifier(ident))
                 }
             }
         }

@@ -1,4 +1,4 @@
-use port::Shareable;
+use port::{Shareable, ShareableError};
 use std::panic;
 use wasm_bindgen::prelude::*;
 
@@ -28,19 +28,21 @@ where
         (payload.into(), transfer)
     }
 }
-impl<T> From<JsValue> for Payload<T>
+impl<T> TryFrom<JsValue> for Payload<T>
 where
     T: Shareable,
 {
-    fn from(value: JsValue) -> Self {
+    type Error = ShareableError;
+
+    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         let value: js_sys::Array = value.into();
         let id: js_sys::Number = value.get(0).into();
         let message = value.get(1);
 
-        Self {
+        Ok(Self {
             id,
-            message: message.into(),
-        }
+            message: message.try_into()?,
+        })
     }
 }
 impl<T> Shareable for Payload<T> where T: Shareable {}
@@ -79,22 +81,25 @@ mod tests {
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum Message {
+    pub enum Plain {
         Ping,
     }
 
     #[wasm_bindgen_test]
     fn plain_enum() {
-        let (data, transfer) = Message::Ping.into();
-        let recovered: Message = data.into();
+        let (data, transfer) = Plain::Ping.into();
+        let recovered: Result<Plain, _> = data.try_into();
 
-        assert_eq!(recovered, Message::Ping);
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(recovered, Plain::Ping);
         assert_eq!(transfer, None);
     }
 
     #[wasm_bindgen_test]
-    #[should_panic]
     fn invalid_ident() {
-        let _: Message = JsValue::from("invalid").into();
+        let recovered: Result<Plain, _> = JsValue::from("invalid").try_into();
+        assert!(recovered.is_err())
     }
 }

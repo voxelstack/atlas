@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker};
@@ -76,7 +76,25 @@ impl<'a> Drop for Listener<'a> {
     }
 }
 
-pub trait Shareable: Into<(JsValue, Option<JsValue>)> + From<JsValue> + Debug {}
+pub trait Shareable:
+    Into<(JsValue, Option<JsValue>)> + TryFrom<JsValue, Error = ShareableError> + Debug
+{
+}
+
+#[derive(Debug, Clone)]
+pub enum ShareableError {
+    InvalidIdentifier(String),
+}
+
+impl fmt::Display for ShareableError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ShareableError::InvalidIdentifier(identifier) => {
+                write!(f, "invalid identifier {}", identifier)
+            }
+        }
+    }
+}
 
 pub struct Port(Box<dyn RawPort>);
 
