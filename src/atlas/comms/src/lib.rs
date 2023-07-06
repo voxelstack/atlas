@@ -159,4 +159,42 @@ mod tests {
         );
         assert_eq!(transfer, None);
     }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum AttrEnum {
+        Draw(#[shareable(transfer)] OffscreenCanvas),
+        Wrap {
+            server: OffscreenCanvas,
+            #[shareable(transfer)]
+            surface: OffscreenCanvas,
+        },
+    }
+
+    #[wasm_bindgen_test]
+    fn attr_enum_tuple() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let (_, transfer) = AttrEnum::Draw(value_a.clone()).into();
+
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value_a);
+    }
+
+    #[wasm_bindgen_test]
+    fn attr_enum_struct() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let value_b = OffscreenCanvas::new(0, 0).unwrap();
+
+        let (_, transfer) = AttrEnum::Wrap {
+            server: value_a.clone(),
+            surface: value_b.clone(),
+        }
+        .into();
+
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value_b);
+    }
 }
