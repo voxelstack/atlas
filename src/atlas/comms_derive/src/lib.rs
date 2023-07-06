@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use std::iter;
 use syn::{parse_macro_input, DeriveInput};
 
 #[derive(PartialEq, Eq, Debug)]
@@ -53,174 +54,115 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     eprintln!("{:#?}", ast);
 
-    let enum_ident = ast.ident;
-    let variants = if let syn::Data::Enum(syn::DataEnum { variants, .. }) = ast.data {
-        variants
-    } else {
-        unimplemented!();
-    };
+    // Might wanna write this to the payload too so we can check if we're
+    // deserializing the right type.
+    let shareable_ident = &ast.ident;
 
-    let store = variants.iter().map(|v| {
-        let entry_name = &v.ident;
+    let (write, read) = match &ast.data {
+        syn::Data::Struct(_) => {
+            todo!();
+        }
+        syn::Data::Enum(syn::DataEnum { variants, .. }) => {
+            let write_variants = variants.iter().map(|v| {
+                let variant_ident = &v.ident;
 
-        match v.fields {
-            syn::Fields::Named(ref fields) => {
-                let name_fields = fields.named.iter().map(|f| {
-                    let field_name = &f.ident;
-                    quote! { #field_name }
-                });
+                fn unnamed_ident(field: &syn::Field, index: usize) -> syn::Ident {
+                    let span = if let syn::Type::Path(path) = &field.ty {
+                        path.path.segments.last().unwrap().ident.span()
+                    } else {
+                        todo!("take span from other types that are not a path");
+                    };
+                    syn::Ident::new(&format!("field{}", index), span)
+                }
 
-                let store_fields = fields.named.iter().map(|f| {
-                    let field_name = &f.ident;
-
-                    let store_data = quote! {
-                        payload.push(&stringify!(#field_name).into());
-                        payload.push(&#field_name.clone().into());
+                let list_fields: Box<dyn Iterator<Item = proc_macro2::TokenStream>> =
+                    match &v.fields {
+                        syn::Fields::Named(ref fields_named) => {
+                            Box::new(fields_named.named.iter().map(|f| {
+                                let field_name = &f.ident;
+                                quote! {#field_name}
+                            }))
+                        }
+                        syn::Fields::Unnamed(ref fields_unnamed) => {
+                            Box::new(fields_unnamed.unnamed.iter().enumerate().map(|(i, f)| {
+                                let field_name = unnamed_ident(f, i);
+                                quote! {#field_name}
+                            }))
+                        }
+                        syn::Fields::Unit => Box::new(iter::empty()),
                     };
 
-                    if let Some(attrs) = parse_attributes(f) {
-                        let process_attrs = attrs.iter().map(|a| match a {
-                            Attribute::Transfer => {
+                match &v.fields {
+                    syn::Fields::Named(ref fields_named) => {
+                        let write_fields = fields_named.named.iter().map(|f| {
+                            let field_name = &f.ident;
+
+                            let field_attrs = parse_attributes(f);
+                            let is_transfer = field_attrs
+                                .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+
+                            let transfer = if is_transfer {
                                 quote! { transfer.push(#field_name.clone().into()); }
+                            } else {
+                                quote! {}
+                            };
+
+                            quote! {
+                                #transfer
+                                payload.push(&stringify!(#field_name).into());
+                                payload.push(&#field_name.into());
                             }
                         });
 
                         quote! {
-                            #store_data
-                            #(#process_attrs)*
-                        }
-                    } else {
-                        quote! {
-                            #store_data
+                            #shareable_ident::#variant_ident{#(#list_fields,)*} => {
+                                payload.push(&stringify!(#variant_ident).into());
+                                #(#write_fields)*
+                            }
                         }
                     }
-                });
+                    syn::Fields::Unnamed(ref fields_unnamed) => {
+                        let write_fields =
+                            fields_unnamed.unnamed.iter().enumerate().map(|(i, f)| {
+                                let field_name = unnamed_ident(f, i);
 
-                quote! {
-                    #enum_ident::#entry_name { #(#name_fields,)* } => {
-                        payload.push(&stringify!(#entry_name).into());
-                        #(#store_fields)*
-                    }
-                }
-            }
-            syn::Fields::Unnamed(ref fields) => {
-                let mut index = 0;
-                let name_fields = fields.unnamed.iter().map(|f| {
-                    let field = format!("field{}", index);
-                    let span = if let syn::Type::Path(path) = &f.ty {
-                        path.path.segments.last().unwrap().ident.span()
-                    } else {
-                        unimplemented!();
-                    };
-                    let field = syn::Ident::new(&field, span);
-                    index += 1;
-                    quote! { #field }
-                });
+                                let field_attrs = parse_attributes(f);
+                                let is_transfer = field_attrs
+                                    .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
 
-                let mut index = 0;
-                let store_fields = fields.unnamed.iter().map(|f| {
-                    let field = format!("field{}", index);
-                    let span = if let syn::Type::Path(path) = &f.ty {
-                        path.path.segments.last().unwrap().ident.span()
-                    } else {
-                        unimplemented!();
-                    };
-                    let field = syn::Ident::new(&field, span);
-                    index += 1;
+                                let transfer = if is_transfer {
+                                    quote! { transfer.push(#field_name.clone().into()); }
+                                } else {
+                                    quote! {}
+                                };
 
-                    let store_data = quote! {
-                        payload.push(&#field.clone().into());
-                    };
-
-                    if let Some(attrs) = parse_attributes(f) {
-                        let process_attrs = attrs.iter().map(|a| match a {
-                            Attribute::Transfer => quote! { transfer.push(#field.clone().into()); },
-                        });
+                                quote! {
+                                    #transfer
+                                    payload.push(&#field_name.into());
+                                }
+                            });
 
                         quote! {
-                            #store_data
-                            #(#process_attrs)*
-                        }
-                    } else {
-                        quote! {
-                            #store_data
+                            #shareable_ident::#variant_ident(#(#list_fields,)*) => {
+                                payload.push(&stringify!(#variant_ident).into());
+                                #(#write_fields)*
+                            }
                         }
                     }
-                });
-
-                quote! {
-                    #enum_ident::#entry_name(#(#name_fields,)*) => {
-                        payload.push(&stringify!(#entry_name).into());
-                        #(#store_fields)*
-                    }
-                }
-            }
-            syn::Fields::Unit => quote! {
-                #enum_ident::#entry_name => {
-                    payload.push(&stringify!(#entry_name).into());
-                }
-            },
-        }
-    });
-
-    let load = variants.iter().map(|v| {
-        let entry_name = &v.ident;
-
-        match v.fields {
-            syn::Fields::Named(ref fields) => {
-                let field_count = fields.named.len();
-                let name_fields = fields.named.iter().map(|f| {
-                    let field_name = &f.ident;
-                    quote! {
-                        #field_name: fields.remove(stringify!(#field_name)).unwrap().into()
-                    }
-                });
-
-                quote! {
-                    stringify!(#entry_name) => {
-                        let mut fields = std::collections::HashMap::<String, JsValue>::new();
-                        for _ in 0..#field_count {
-                            let field_name = payload.shift().as_string().unwrap();
-                            fields.insert(field_name, payload.shift());
+                    syn::Fields::Unit => quote! {
+                        #shareable_ident::#variant_ident => {
+                            payload.push(&stringify!(#variant_ident).into());
                         }
-
-                        std::result::Result::Ok(#enum_ident::#entry_name {
-                            #(#name_fields,)*
-                        })
-                    }
+                    },
                 }
-            }
-            syn::Fields::Unnamed(ref fields) => {
-                let load_fields = fields.unnamed.iter().map(|_| {
-                    // TODO Detect and handle values that don't impl From<JsValue>.
-                    // Start with (bools, numbers and strings).
-                    quote! {
-                        payload.shift().into()
-                    }
-                });
+            });
 
-                quote! {
-                    stringify!(#entry_name) => {
-                        std::result::Result::Ok(#enum_ident::#entry_name(
-                            #(#load_fields,)*
-                        ))
-                    }
-                }
-            }
-            syn::Fields::Unit => quote! {
-                stringify!(#entry_name) => std::result::Result::Ok(#enum_ident::#entry_name)
-            },
-        }
-    });
-
-    let expanded = quote! {
-        impl core::convert::Into<(wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>)> for #enum_ident {
-            fn into(self) -> (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>) {
+            let write = quote! {
                 let payload = js_sys::Array::new();
                 let mut transfer: std::vec::Vec<JsValue> = std::vec::Vec::new();
 
                 match self {
-                    #(#store,)*
+                    #(#write_variants,)*
                 };
 
                 let transfer = if transfer.len() > 0 {
@@ -235,24 +177,79 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 };
 
                 (payload.into(), transfer)
+            };
+
+            let read_variants = variants.iter().map(|v| {
+                let variant_ident = &v.ident;
+
+                match &v.fields {
+                    syn::Fields::Named(ref fields_named) => {
+                        let field_count = fields_named.named.len();
+                        let name_fields = fields_named.named.iter().map(|f| {
+                            let field_name = &f.ident;
+                            quote! {
+                                #field_name: fields.remove(stringify!(#field_name)).unwrap().into()
+                            }
+                        });
+
+                        quote! {
+                            stringify!(#variant_ident) => {
+                                let mut fields = std::collections::HashMap::<String, JsValue>::new();
+                                for _ in 0..#field_count {
+                                    let field_name = payload.shift().as_string().unwrap();
+                                    fields.insert(field_name, payload.shift());
+                                }
+
+                                std::result::Result::Ok(#shareable_ident::#variant_ident {
+                                    #(#name_fields,)*
+                                })
+                            }
+                        }
+                    },
+                    syn::Fields::Unnamed(ref fields_unnamed) => {
+                        let read_fields = fields_unnamed.unnamed.iter().map(|_| quote!{payload.shift().into()});
+                        quote! {
+                            stringify!(#variant_ident) => std::result::Result::Ok(#shareable_ident::#variant_ident(#(#read_fields,)*))
+                        }
+                    },
+                    syn::Fields::Unit => quote! {
+                        stringify!(#variant_ident) => std::result::Result::Ok(#shareable_ident::#variant_ident)
+                    },
+                }
+            });
+
+            let read = quote! {
+                let payload: js_sys::Array = value.into();
+                let variant_ident = payload.shift().as_string().unwrap();
+
+                match variant_ident.as_ref() {
+                    #(#read_variants,)*
+                    _ => std::result::Result::Err(crate::port::ShareableError::InvalidIdentifier(variant_ident))
+                }
+
+            };
+
+            (write, read)
+        }
+        syn::Data::Union(_) => todo!("not supported, generate a compile error"),
+    };
+
+    let expanded = quote! {
+        impl core::convert::Into<(wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>)> for #shareable_ident {
+            fn into(self) -> (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>) {
+                #write
             }
         }
 
-        impl core::convert::TryFrom<wasm_bindgen::JsValue> for #enum_ident {
+        impl core::convert::TryFrom<wasm_bindgen::JsValue> for #shareable_ident {
             type Error = crate::port::ShareableError;
 
             fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-                let payload: js_sys::Array = value.into();
-                let ident = payload.shift().as_string().unwrap();
-
-                match ident.as_ref() {
-                    #(#load,)*
-                    _ => std::result::Result::Err(crate::port::ShareableError::InvalidIdentifier(ident))
-                }
+                #read
             }
         }
 
-        impl crate::port::Shareable for #enum_ident {}
+        impl crate::port::Shareable for #shareable_ident {}
     };
     expanded.into()
 }
