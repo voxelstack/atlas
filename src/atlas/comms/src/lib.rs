@@ -77,29 +77,54 @@ mod tests {
     use super::*;
     use atlas_comms_derive::Shareable;
     use wasm_bindgen_test::*;
+    use web_sys::{OffscreenCanvas, Worker};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum Plain {
+    pub enum PlainEnum {
         Ping,
     }
 
     #[wasm_bindgen_test]
     fn plain_enum() {
-        let (data, transfer) = Plain::Ping.into();
-        let recovered: Result<Plain, _> = data.try_into();
+        let (data, transfer) = PlainEnum::Ping.into();
+        let recovered: Result<PlainEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
         let recovered = recovered.unwrap();
 
-        assert_eq!(recovered, Plain::Ping);
+        assert_eq!(recovered, PlainEnum::Ping);
         assert_eq!(transfer, None);
     }
 
     #[wasm_bindgen_test]
     fn invalid_ident() {
-        let recovered: Result<Plain, _> = JsValue::from("invalid").try_into();
+        let payload = js_sys::Array::new();
+        payload.push(&"invalid".into());
+        let payload: JsValue = payload.into();
+
+        let recovered: Result<PlainEnum, _> = payload.try_into();
         assert!(recovered.is_err())
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum TupleEnum {
+        Ping,
+        Attach(OffscreenCanvas),
+        Wrap(Worker, OffscreenCanvas),
+    }
+
+    #[wasm_bindgen_test]
+    fn value_enum() {
+        let value = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = TupleEnum::Attach(value.clone()).into();
+        let recovered: Result<TupleEnum, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(recovered, TupleEnum::Attach(value));
+        assert_eq!(transfer, None);
     }
 }
