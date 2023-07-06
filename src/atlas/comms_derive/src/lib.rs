@@ -1,4 +1,4 @@
-use proc_macro::{Span, TokenStream};
+use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
@@ -18,7 +18,27 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let entry_name = &v.ident;
 
         match v.fields {
-            syn::Fields::Named(_) => todo!(),
+            syn::Fields::Named(ref fields) => {
+                let name_fields = fields.named.iter().map(|f| {
+                    let field_name = &f.ident;
+                    quote! { #field_name }
+                });
+
+                let store_fields = fields.named.iter().map(|f| {
+                    let field_name = &f.ident;
+                    quote! {
+                        payload.push(&stringify!(#field_name).into());
+                        payload.push(&#field_name.into());
+                    }
+                });
+
+                quote! {
+                    #enum_ident::#entry_name { #(#name_fields,)* } => {
+                        payload.push(&stringify!(#entry_name).into());
+                        #(#store_fields)*
+                    }
+                }
+            }
             syn::Fields::Unnamed(ref fields) => {
                 let mut index = 0;
                 let name_fields = fields.unnamed.iter().map(|f| {
@@ -67,7 +87,29 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let entry_name = &v.ident;
 
         match v.fields {
-            syn::Fields::Named(_) => todo!(),
+            syn::Fields::Named(ref fields) => {
+                let field_count = fields.named.len();
+                let name_fields = fields.named.iter().map(|f| {
+                    let field_name = &f.ident;
+                    quote! {
+                        #field_name: fields.remove(stringify!(#field_name)).unwrap().into()
+                    }
+                });
+
+                quote! {
+                    stringify!(#entry_name) => {
+                        let mut fields = std::collections::HashMap::<String, JsValue>::new();
+                        for _ in 0..#field_count {
+                            let field_name = payload.shift().as_string().unwrap();
+                            fields.insert(field_name, payload.shift());
+                        }
+
+                        std::result::Result::Ok(#enum_ident::#entry_name {
+                            #(#name_fields,)*
+                        })
+                    }
+                }
+            }
             syn::Fields::Unnamed(ref fields) => {
                 let load_fields = fields.unnamed.iter().map(|_| {
                     // TODO Detect and handle values that don't impl From<JsValue>.

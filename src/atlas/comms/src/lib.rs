@@ -127,4 +127,36 @@ mod tests {
         assert_eq!(recovered, TupleEnum::Attach(value));
         assert_eq!(transfer, None);
     }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum StructEnum {
+        Wrap {
+            server: OffscreenCanvas,
+            surface: OffscreenCanvas,
+        },
+    }
+
+    #[wasm_bindgen_test]
+    fn struct_enum() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let value_b = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = StructEnum::Wrap {
+            server: value_a.clone(),
+            surface: value_b.clone(),
+        }
+        .into();
+        let recovered: Result<StructEnum, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            StructEnum::Wrap {
+                server: value_a,
+                surface: value_b
+            }
+        );
+        assert_eq!(transfer, None);
+    }
 }
