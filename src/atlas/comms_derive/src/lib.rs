@@ -6,6 +6,7 @@ use syn::{parse_macro_input, DeriveInput};
 #[derive(PartialEq, Eq, Debug)]
 enum Attribute {
     Transfer,
+    Serde,
 }
 
 fn parse_attributes(field: &syn::Field) -> Option<Vec<Attribute>> {
@@ -25,9 +26,11 @@ fn parse_attributes(field: &syn::Field) -> Option<Vec<Attribute>> {
                             .into_iter()
                             .filter_map(|t| {
                                 if let proc_macro2::TokenTree::Ident(ident) = t {
-                                    if ident == "transfer" {
-                                        return Some(Attribute::Transfer);
-                                    }
+                                    return match ident.to_string().as_ref() {
+                                        "transfer" => Some(Attribute::Transfer),
+                                        "serde" => Some(Attribute::Serde),
+                                        _ => todo!("compiler error, invalid attr"),
+                                    };
                                 }
 
                                 None
@@ -42,6 +45,8 @@ fn parse_attributes(field: &syn::Field) -> Option<Vec<Attribute>> {
         .flatten()
         .collect();
 
+    // TODO Return an attrs struct instead of a Vec:
+    // ```{ transfer: false, serde: true }```
     if attrs.len() > 0 {
         Some(attrs)
     } else {
@@ -65,8 +70,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     Box::new(fields_named.named.iter().map(|f| {
                         let field_name = &f.ident;
                         let field_attrs = parse_attributes(f);
-                        let is_transfer =
-                            field_attrs.is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_transfer = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_serde = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
 
                         let transfer = if is_transfer {
                             quote! { transfer.push(self.#field_name.clone().into()); }
@@ -74,10 +83,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             quote! {}
                         };
 
+                        let write = if is_serde {
+                            quote! {
+                                payload.push(&stringify!(#field_name).into());
+                                payload.push(&serde_wasm_bindgen::to_value(&self.#field_name).unwrap());
+                            }
+                        } else {
+                            quote! {
+                                payload.push(&stringify!(#field_name).into());
+                                payload.push(&self.#field_name.into());
+                            }
+                        };
+
                         quote! {
                             #transfer
-                            payload.push(&stringify!(#field_name).into());
-                            payload.push(&self.#field_name.into());
+                            #write
                         }
                     }))
                 }
@@ -85,8 +105,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     Box::new(fields_unnamed.unnamed.iter().enumerate().map(|(i, f)| {
                         let field_index = syn::Index::from(i);
                         let field_attrs = parse_attributes(f);
-                        let is_transfer =
-                            field_attrs.is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_transfer = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_serde = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
 
                         let transfer = if is_transfer {
                             quote! { transfer.push(self.#field_index.clone().into()); }
@@ -94,9 +118,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             quote! {}
                         };
 
+                        let write = if is_serde {
+                            quote! {
+                                payload.push(&serde_wasm_bindgen::to_value(&self.#field_index).unwrap());
+                            }
+                        } else {
+                            quote! { payload.push(&self.#field_index.into()); }
+                        };
+
                         quote! {
                             #transfer
-                            payload.push(&self.#field_index.into());
+                            #write
                         }
                     }))
                 }
@@ -128,8 +160,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     let field_count = named_fields.named.len();
                     let read_fields = named_fields.named.iter().map(|f| {
                         let field_name = &f.ident;
+                        let field_attrs = parse_attributes(f);
+                        let is_serde = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
 
-                        quote! {#field_name: fields.remove(stringify!(#field_name)).unwrap().into()}
+                        if is_serde {
+                            quote! {
+                                #field_name: serde_wasm_bindgen::from_value(
+                                    fields.remove(stringify!(#field_name)).unwrap()
+                                ).unwrap()
+                            }
+                        } else {
+                            quote! {#field_name: fields.remove(stringify!(#field_name)).unwrap().into()}
+                        }
+                        
                     });
                     quote! {{
                         let mut fields = std::collections::HashMap::<String, JsValue>::new();
@@ -142,10 +187,18 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     }}
                 }
                 syn::Fields::Unnamed(ref unnamed_fields) => {
-                    let read_fields = unnamed_fields
-                        .unnamed
-                        .iter()
-                        .map(|_| quote! {payload.shift().into()});
+                    let read_fields = unnamed_fields.unnamed.iter().map(|f| {
+                        let field_attrs = parse_attributes(f);
+                        let is_serde = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
+
+                        if is_serde {
+                            quote! {serde_wasm_bindgen::from_value(payload.shift()).unwrap()}
+                        } else {
+                            quote! {payload.shift().into()}
+                        }
+                    });
                     quote! { #shareable_ident(#(#read_fields,)*) }
                 }
                 syn::Fields::Unit => quote! { #shareable_ident },
@@ -195,7 +248,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
                             let field_attrs = parse_attributes(f);
                             let is_transfer = field_attrs
+                                .as_ref()
                                 .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                            let is_serde = field_attrs
+                                .as_ref()
+                                .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
 
                             let transfer = if is_transfer {
                                 quote! { transfer.push(#field_name.clone().into()); }
@@ -203,10 +260,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 quote! {}
                             };
 
+                            let write = if is_serde {
+                                quote! {
+                                    payload.push(&stringify!(#field_name).into());
+                                    payload.push(&serde_wasm_bindgen::to_value(&#field_name).unwrap());
+                                }
+                            } else {
+                                quote! {
+                                    payload.push(&stringify!(#field_name).into());
+                                    payload.push(&#field_name.into());
+                                }
+                            };
+
                             quote! {
                                 #transfer
-                                payload.push(&stringify!(#field_name).into());
-                                payload.push(&#field_name.into());
+                                #write
                             }
                         });
 
@@ -223,8 +291,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 let field_name = unnamed_ident(f, i);
 
                                 let field_attrs = parse_attributes(f);
-                                let is_transfer = field_attrs
-                                    .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_transfer = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+                        let is_serde = field_attrs
+                            .as_ref()
+                            .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
 
                                 let transfer = if is_transfer {
                                     quote! { transfer.push(#field_name.clone().into()); }
@@ -232,9 +304,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                     quote! {}
                                 };
 
+                                let write = if is_serde {
+                                    quote!{
+                                        payload.push(&serde_wasm_bindgen::to_value(&#field_name).unwrap()); 
+                                    }
+                                } else {
+                                    quote!{ payload.push(&#field_name.into()); }
+                                };
+
                                 quote! {
                                     #transfer
-                                    payload.push(&#field_name.into());
+                                    #write
                                 }
                             });
 
@@ -283,8 +363,19 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         let field_count = fields_named.named.len();
                         let name_fields = fields_named.named.iter().map(|f| {
                             let field_name = &f.ident;
-                            quote! {
-                                #field_name: fields.remove(stringify!(#field_name)).unwrap().into()
+                            let field_attrs = parse_attributes(f);
+                            let is_serde = field_attrs
+                                .as_ref()
+                                .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
+
+                            if is_serde {
+                                quote! {
+                                    #field_name: serde_wasm_bindgen::from_value(fields.remove(stringify!(#field_name)).unwrap()).unwrap()
+                                }
+                            } else {
+                                quote! {
+                                    #field_name: fields.remove(stringify!(#field_name)).unwrap().into()
+                                }
                             }
                         });
 
@@ -303,7 +394,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         }
                     },
                     syn::Fields::Unnamed(ref fields_unnamed) => {
-                        let read_fields = fields_unnamed.unnamed.iter().map(|_| quote!{payload.shift().into()});
+                        let read_fields = fields_unnamed.unnamed.iter().map(|f| {
+                            let field_attrs = parse_attributes(f);
+                            let is_serde = field_attrs
+                                .as_ref()
+                                .is_some_and(|attrs| attrs.contains(&Attribute::Serde));
+
+                            if is_serde {
+                                quote!{
+                                    serde_wasm_bindgen::from_value(payload.shift()).unwrap()
+                                }
+                            } else {
+                                quote!{payload.shift().into()}
+                            }
+                            
+                        });
                         quote! {
                             stringify!(#variant_ident) => std::result::Result::Ok(#shareable_ident::#variant_ident(#(#read_fields,)*))
                         }

@@ -296,4 +296,112 @@ mod tests {
         let recovered: OffscreenCanvas = transfer.get(0).into();
         assert_eq!(recovered, value_b);
     }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum SerdeTupleEnum {
+        Message(#[shareable(serde)] String, #[shareable(serde)] Option<u32>),
+        Ping,
+    }
+
+    #[wasm_bindgen_test]
+    fn serde_tuple_enum() {
+        let (data, transfer) = SerdeTupleEnum::Message("voxelstack.me".into(), Some(314)).into();
+        let recovered: Result<SerdeTupleEnum, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            SerdeTupleEnum::Message("voxelstack.me".into(), Some(314))
+        );
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub enum SerdeStructEnum {
+        Message {
+            #[shareable(serde)]
+            key: String,
+            #[shareable(serde)]
+            value: Option<u32>,
+        },
+        Ping,
+    }
+
+    #[wasm_bindgen_test]
+    fn serde_struct_enum() {
+        let (data, transfer) = SerdeStructEnum::Message {
+            key: "voxelstack.me".into(),
+            value: Some(314),
+        }
+        .into();
+        let recovered: Result<SerdeStructEnum, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            SerdeStructEnum::Message {
+                key: "voxelstack.me".into(),
+                value: Some(314),
+            }
+        );
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct SerdeTupleStruct(
+        #[shareable(serde)] String,
+        #[shareable(serde)] Option<u32>,
+        OffscreenCanvas,
+    );
+
+    #[wasm_bindgen_test]
+    fn serde_tuple_struct() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) =
+            SerdeTupleStruct("voxelstack.me".into(), Some(314), value_a.clone()).into();
+        let recovered: Result<SerdeTupleStruct, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            SerdeTupleStruct("voxelstack.me".into(), Some(314), value_a)
+        );
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct SerdeStructStruct {
+        #[shareable(serde)]
+        key: String,
+        #[shareable(serde)]
+        value: Option<u32>,
+    }
+
+    #[wasm_bindgen_test]
+    fn serde_struct_struct() {
+        let (data, transfer) = SerdeStructStruct {
+            key: "voxelstack.me".into(),
+            value: Some(314),
+        }
+        .into();
+        let recovered: Result<SerdeStructStruct, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            SerdeStructStruct {
+                key: "voxelstack.me".into(),
+                value: Some(314),
+            }
+        );
+        assert_eq!(transfer, None);
+    }
 }
