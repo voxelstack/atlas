@@ -197,4 +197,103 @@ mod tests {
         let recovered: OffscreenCanvas = transfer.get(0).into();
         assert_eq!(recovered, value_b);
     }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct PlainStruct;
+
+    #[wasm_bindgen_test]
+    fn plain_struct() {
+        let (data, transfer) = PlainStruct.into();
+        let recovered: Result<PlainStruct, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(recovered, PlainStruct);
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct TupleStruct(OffscreenCanvas);
+
+    #[wasm_bindgen_test]
+    fn tuple_struct() {
+        let value = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = TupleStruct(value.clone()).into();
+        let recovered: Result<TupleStruct, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(recovered, TupleStruct(value));
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct StructStruct {
+        worker: OffscreenCanvas,
+        canvas: OffscreenCanvas,
+    }
+
+    #[wasm_bindgen_test]
+    fn struct_struct() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let value_b = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = StructStruct {
+            worker: value_a.clone(),
+            canvas: value_b.clone(),
+        }
+        .into();
+        let recovered: Result<StructStruct, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            StructStruct {
+                worker: value_a,
+                canvas: value_b
+            }
+        );
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct AttrTupleStruct(#[shareable(transfer)] OffscreenCanvas);
+
+    #[wasm_bindgen_test]
+    fn attr_tuple_struct() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let (_, transfer) = AttrTupleStruct(value_a.clone()).into();
+
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value_a);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct AttrStructStruct {
+        worker: OffscreenCanvas,
+        #[shareable(transfer)]
+        canvas: OffscreenCanvas,
+    }
+
+    #[wasm_bindgen_test]
+    fn attr_struct_struct() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let value_b = OffscreenCanvas::new(0, 0).unwrap();
+
+        let (_, transfer) = AttrStructStruct {
+            worker: value_a.clone(),
+            canvas: value_b.clone(),
+        }
+        .into();
+
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value_b);
+    }
 }

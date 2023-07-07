@@ -59,8 +59,104 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let shareable_ident = &ast.ident;
 
     let (write, read) = match &ast.data {
-        syn::Data::Struct(_) => {
-            todo!();
+        syn::Data::Struct(syn::DataStruct { fields, .. }) => {
+            let write_fields: Box<dyn Iterator<Item = proc_macro2::TokenStream>> = match &fields {
+                syn::Fields::Named(ref fields_named) => {
+                    Box::new(fields_named.named.iter().map(|f| {
+                        let field_name = &f.ident;
+                        let field_attrs = parse_attributes(f);
+                        let is_transfer =
+                            field_attrs.is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+
+                        let transfer = if is_transfer {
+                            quote! { transfer.push(self.#field_name.clone().into()); }
+                        } else {
+                            quote! {}
+                        };
+
+                        quote! {
+                            #transfer
+                            payload.push(&stringify!(#field_name).into());
+                            payload.push(&self.#field_name.into());
+                        }
+                    }))
+                }
+                syn::Fields::Unnamed(ref fields_unnamed) => {
+                    Box::new(fields_unnamed.unnamed.iter().enumerate().map(|(i, f)| {
+                        let field_index = syn::Index::from(i);
+                        let field_attrs = parse_attributes(f);
+                        let is_transfer =
+                            field_attrs.is_some_and(|attrs| attrs.contains(&Attribute::Transfer));
+
+                        let transfer = if is_transfer {
+                            quote! { transfer.push(self.#field_index.clone().into()); }
+                        } else {
+                            quote! {}
+                        };
+
+                        quote! {
+                            #transfer
+                            payload.push(&self.#field_index.into());
+                        }
+                    }))
+                }
+                syn::Fields::Unit => Box::new(iter::empty()),
+            };
+
+            let write = quote! {
+                let payload = js_sys::Array::new();
+                let mut transfer: std::vec::Vec<JsValue> = std::vec::Vec::new();
+
+                #(#write_fields)*
+
+                let transfer = if transfer.len() > 0 {
+                    let js_transfer = js_sys::Array::new_with_length(transfer.len().try_into().unwrap());
+                    for (i, t) in transfer.into_iter().enumerate() {
+                        js_transfer.set(i.try_into().unwrap(), t);
+                    }
+
+                    std::option::Option::Some(js_transfer.into())
+                } else {
+                    std::option::Option::None
+                };
+
+                (payload.into(), transfer)
+            };
+
+            let make_struct = match &fields {
+                syn::Fields::Named(ref named_fields) => {
+                    let field_count = named_fields.named.len();
+                    let read_fields = named_fields.named.iter().map(|f| {
+                        let field_name = &f.ident;
+
+                        quote! {#field_name: fields.remove(stringify!(#field_name)).unwrap().into()}
+                    });
+                    quote! {{
+                        let mut fields = std::collections::HashMap::<String, JsValue>::new();
+                        for _ in 0..#field_count {
+                            let field_name = payload.shift().as_string().unwrap();
+                            fields.insert(field_name, payload.shift());
+                        }
+
+                        #shareable_ident { #(#read_fields,)* }
+                    }}
+                }
+                syn::Fields::Unnamed(ref unnamed_fields) => {
+                    let read_fields = unnamed_fields
+                        .unnamed
+                        .iter()
+                        .map(|_| quote! {payload.shift().into()});
+                    quote! { #shareable_ident(#(#read_fields,)*) }
+                }
+                syn::Fields::Unit => quote! { #shareable_ident },
+            };
+
+            let read = quote! {
+                let payload: js_sys::Array = value.into();
+                std::result::Result::Ok(#make_struct)
+            };
+
+            (write, read)
         }
         syn::Data::Enum(syn::DataEnum { variants, .. }) => {
             let write_variants = variants.iter().map(|v| {
