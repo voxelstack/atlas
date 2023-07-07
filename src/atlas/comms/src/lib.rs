@@ -299,7 +299,10 @@ mod tests {
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
     pub enum SerdeTupleEnum {
-        Message(#[shareable(serde)] String, #[shareable(serde)] Option<u32>),
+        Message(
+            #[shareable(repr = "serde")] String,
+            #[shareable(repr = "serde")] Option<u32>,
+        ),
         Ping,
     }
 
@@ -321,9 +324,9 @@ mod tests {
     #[derive(Debug, PartialEq, Eq, Shareable)]
     pub enum SerdeStructEnum {
         Message {
-            #[shareable(serde)]
+            #[shareable(repr = "serde")]
             key: String,
-            #[shareable(serde)]
+            #[shareable(repr = "serde")]
             value: Option<u32>,
         },
         Ping,
@@ -353,8 +356,8 @@ mod tests {
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
     pub struct SerdeTupleStruct(
-        #[shareable(serde)] String,
-        #[shareable(serde)] Option<u32>,
+        #[shareable(repr = "serde")] String,
+        #[shareable(repr = "serde")] Option<u32>,
         OffscreenCanvas,
     );
 
@@ -377,9 +380,9 @@ mod tests {
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
     pub struct SerdeStructStruct {
-        #[shareable(serde)]
+        #[shareable(repr = "serde")]
         key: String,
-        #[shareable(serde)]
+        #[shareable(repr = "serde")]
         value: Option<u32>,
     }
 
