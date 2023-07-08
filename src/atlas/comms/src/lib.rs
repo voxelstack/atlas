@@ -76,6 +76,7 @@ pub fn init_output() {
 mod tests {
     use super::*;
     use atlas_comms_derive::Shareable;
+    use std::fmt::Debug;
     use wasm_bindgen_test::*;
     use web_sys::{OffscreenCanvas, Worker};
 
@@ -405,6 +406,30 @@ mod tests {
                 value: Some(314),
             }
         );
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    pub struct Generic<T>
+    where
+        T: Into<JsValue> + From<JsValue> + Debug,
+    {
+        value: T,
+    }
+
+    #[wasm_bindgen_test]
+    fn generic() {
+        let value = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = Generic {
+            value: value.clone(),
+        }
+        .into();
+        let recovered: Result<Generic<OffscreenCanvas>, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(recovered, Generic { value });
         assert_eq!(transfer, None);
     }
 }

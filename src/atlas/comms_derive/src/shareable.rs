@@ -22,14 +22,24 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
         syn::Data::Union(_) => Err(syn::Error::new(ast.span(), UNSUPPORTED_UNION)),
     }?;
 
+    let (impl_generics, ty_generics, where_clause) = &ast.generics.split_for_impl();
     let expanded = quote! {
-        impl core::convert::Into<(wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>)> for #shareable_ident {
+        impl #impl_generics
+            core::convert::Into<(
+                wasm_bindgen::JsValue,
+                std::option::Option<wasm_bindgen::JsValue>
+            )> for #shareable_ident #ty_generics
+            #where_clause
+        {
             fn into(self) -> (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>) {
                 #write
             }
         }
 
-        impl core::convert::TryFrom<wasm_bindgen::JsValue> for #shareable_ident {
+        impl #impl_generics
+            core::convert::TryFrom<wasm_bindgen::JsValue> for #shareable_ident #ty_generics
+            #where_clause
+        {
             type Error = crate::port::ShareableError;
 
             fn try_from(value: JsValue) -> Result<Self, Self::Error> {
@@ -37,7 +47,10 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
             }
         }
 
-        impl crate::port::Shareable for #shareable_ident {}
+        impl #impl_generics
+            crate::port::Shareable for #shareable_ident #ty_generics
+            #where_clause
+        {}
     };
 
     Ok(expanded)

@@ -76,6 +76,8 @@ impl<'a> Drop for Listener<'a> {
     }
 }
 
+// TODO Reconsider the + Debug bound, right now it's there so I can unwrap tokio
+//  channel errors.
 pub trait Shareable:
     Into<(JsValue, Option<JsValue>)> + TryFrom<JsValue, Error = ShareableError> + Debug
 {
