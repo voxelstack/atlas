@@ -83,16 +83,27 @@ pub trait Shareable:
 {
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ShareableError {
-    InvalidIdentifier(String),
+    IncompatibleType,
+    BadPayload,
+    SerdeFailure,
 }
 
 impl fmt::Display for ShareableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ShareableError::InvalidIdentifier(identifier) => {
-                write!(f, "invalid identifier {}", identifier)
+            ShareableError::IncompatibleType => {
+                write!(
+                    f,
+                    "the type of the payload doesn't match the type being read"
+                )
+            }
+            ShareableError::BadPayload => {
+                write!(f, "invalid payload format")
+            }
+            ShareableError::SerdeFailure => {
+                write!(f, "serde failed while sharing")
             }
         }
     }

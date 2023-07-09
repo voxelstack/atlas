@@ -44,6 +44,8 @@ pub fn init_output() {
 
 #[cfg(test)]
 mod tests {
+    use crate::port::ShareableError;
+
     use super::*;
     use atlas_comms_derive::Shareable;
     use std::fmt::Debug;
@@ -72,6 +74,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn invalid_ident() {
         let payload = js_sys::Array::new();
+        payload.push(&"PlainEnum".into());
         payload.push(&"invalid".into());
         let payload: JsValue = payload.into();
 
@@ -553,5 +556,14 @@ mod tests {
             }
         );
         assert_eq!(transfer, None);
+    }
+
+    #[wasm_bindgen_test]
+    fn incompatible_type() {
+        let (data, _) = PlainEnum::Ping.into();
+        let recovered: Result<PlainStruct, _> = data.try_into();
+
+        assert!(recovered.is_err());
+        assert_eq!(recovered, Err(ShareableError::IncompatibleType));
     }
 }

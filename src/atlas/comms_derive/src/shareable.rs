@@ -32,7 +32,20 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
             #where_clause
         {
             fn into(self) -> (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>) {
+                let payload = js_sys::Array::new();
+                let mut transfer = js_sys::Array::new();
+
+                payload.push(&stringify!(#shareable_ident).into());
+
                 #write
+
+                let transfer = if transfer.length() > 0 {
+                    std::option::Option::Some(transfer.into())
+                } else {
+                    std::option::Option::None
+                };
+
+                (payload.into(), transfer)
             }
         }
 
@@ -43,6 +56,16 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
             type Error = crate::port::ShareableError;
 
             fn try_from(value: JsValue) -> Result<Self, Self::Error> {
+                let payload: js_sys::Array = value.into();
+
+                let ident = payload
+                    .shift()
+                    .as_string()
+                    .ok_or(crate::port::ShareableError::BadPayload)?;
+                if ident != stringify!(#shareable_ident) {
+                    return std::result::Result::Err(crate::port::ShareableError::IncompatibleType);
+                }
+
                 #read
             }
         }
@@ -112,21 +135,32 @@ fn read_field(field: &syn::Field) -> syn::Result<proc_macro2::TokenStream> {
     let expanded = if field_ident.is_some() {
         match field_attrs.repr {
             Repr::Raw => quote! {
-                #field_ident: fields.remove(stringify!(#field_ident)).unwrap().into()
+                #field_ident: fields
+                    .remove(stringify!(#field_ident))
+                    .ok_or(crate::port::ShareableError::BadPayload)?
+                    .into()
             },
             Repr::Serde => quote! {
-                #field_ident: serde_wasm_bindgen::from_value(
-                    fields.remove(stringify!(#field_ident)).unwrap()
-                ).unwrap()
+                #field_ident: serde_wasm_bindgen::from_value(fields
+                    .remove(stringify!(#field_ident))
+                    .ok_or(crate::port::ShareableError::BadPayload)?
+                ).map_err(|_| crate::port::ShareableError::BadPayload)?
             },
             Repr::Shareable => quote! {
-                #field_ident: fields.remove(stringify!(#field_ident)).unwrap().try_into()?
+                #field_ident: fields
+                    .remove(stringify!(#field_ident))
+                    .ok_or(crate::port::ShareableError::BadPayload)?
+                    .try_into()?
             },
         }
     } else {
         match field_attrs.repr {
             Repr::Raw => quote! { payload.shift().into() },
-            Repr::Serde => quote! { serde_wasm_bindgen::from_value(payload.shift()).unwrap() },
+            Repr::Serde => {
+                quote! { serde_wasm_bindgen::from_value(payload.shift())
+                    .map_err(|_| crate::port::ShareableError::BadPayload)?
+                }
+            }
             Repr::Shareable => quote! { payload.shift().try_into()? },
         }
     };
@@ -189,7 +223,10 @@ fn read_fields_named(
     let read = quote! {std::result::Result::Ok({
         let mut fields = std::collections::HashMap::<String, JsValue>::new();
         for _ in 0..#field_count {
-            let field_name = payload.shift().as_string().unwrap();
+            let field_name = payload
+                .shift()
+                .as_string()
+                .ok_or(crate::port::ShareableError::BadPayload)?;
             fields.insert(field_name, payload.shift());
         }
 
@@ -234,19 +271,8 @@ fn write_shareable_struct(
     };
 
     let write = quote! {
-        let payload = js_sys::Array::new();
-        let mut transfer = js_sys::Array::new();
-
         #destructure
         #write_fields
-
-        let transfer = if transfer.length() > 0 {
-            std::option::Option::Some(transfer.into())
-        } else {
-            std::option::Option::None
-        };
-
-        (payload.into(), transfer)
     };
 
     Ok(write)
@@ -266,12 +292,7 @@ fn read_shareable_struct(
         syn::Fields::Unit => quote! { std::result::Result::Ok(#shareable_ident) },
     };
 
-    let read = quote! {
-        let payload: js_sys::Array = value.into();
-        #make_struct
-    };
-
-    Ok(read)
+    Ok(quote! { #make_struct })
 }
 
 fn write_shareable_enum(
@@ -317,20 +338,9 @@ fn write_shareable_enum(
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let write = quote! {
-        let payload = js_sys::Array::new();
-        let mut transfer = js_sys::Array::new();
-
         match self {
             #(#write_variants,)*
         };
-
-        let transfer = if transfer.length() > 0 {
-            std::option::Option::Some(transfer.into())
-        } else {
-            std::option::Option::None
-        };
-
-        (payload.into(), transfer)
     };
 
     Ok(write)
@@ -366,12 +376,14 @@ fn read_shareable_enum(
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let read = quote! {
-        let payload: js_sys::Array = value.into();
-        let variant_ident = payload.shift().as_string().unwrap();
+        let variant_ident = payload
+            .shift()
+            .as_string()
+            .ok_or(crate::port::ShareableError::BadPayload)?;
 
         match variant_ident.as_ref() {
             #(#read_variants,)*
-            _ => std::result::Result::Err(crate::port::ShareableError::InvalidIdentifier(variant_ident))
+            _ => std::result::Result::Err(crate::port::ShareableError::BadPayload)
         }
 
     };
