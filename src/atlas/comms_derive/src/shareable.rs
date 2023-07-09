@@ -6,8 +6,6 @@ use syn::spanned::Spanned;
 const UNSUPPORTED_UNION: &str = "unions are not supported by derive(Shareable)";
 
 pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
-    // Might wanna write this to the payload too so we can check if we're
-    // deserializing the right type.
     let shareable_ident = &ast.ident;
 
     let write = match &ast.data {
@@ -15,12 +13,30 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
         syn::Data::Enum(data_enum) => write_shareable_enum(shareable_ident, data_enum),
         syn::Data::Union(_) => Err(syn::Error::new(ast.span(), UNSUPPORTED_UNION)),
     }?;
+    let write_ident = if cfg!(feature = "verification") {
+        quote! { payload.push(&stringify!(#shareable_ident).into()); }
+    } else {
+        quote! {}
+    };
 
     let read = match &ast.data {
         syn::Data::Struct(data_struct) => read_shareable_struct(shareable_ident, data_struct),
         syn::Data::Enum(data_enum) => read_shareable_enum(shareable_ident, data_enum),
         syn::Data::Union(_) => Err(syn::Error::new(ast.span(), UNSUPPORTED_UNION)),
     }?;
+    let read_ident = if cfg!(feature = "verification") {
+        quote! {
+            let ident = payload
+                .shift()
+                .as_string()
+                .ok_or(crate::port::ShareableError::BadPayload)?;
+            if ident != stringify!(#shareable_ident) {
+                return std::result::Result::Err(crate::port::ShareableError::IncompatibleType);
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     let (impl_generics, ty_generics, where_clause) = &ast.generics.split_for_impl();
     let expanded = quote! {
@@ -40,8 +56,7 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
                 let payload = js_sys::Array::new();
                 let mut transfer = js_sys::Array::new();
 
-                payload.push(&stringify!(#shareable_ident).into());
-
+                #write_ident
                 #write
 
                 let transfer = if transfer.length() > 0 {
@@ -63,14 +78,7 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
             fn try_from(value: JsValue) -> Result<Self, Self::Error> {
                 let payload: js_sys::Array = value.into();
 
-                let ident = payload
-                    .shift()
-                    .as_string()
-                    .ok_or(crate::port::ShareableError::BadPayload)?;
-                if ident != stringify!(#shareable_ident) {
-                    return std::result::Result::Err(crate::port::ShareableError::IncompatibleType);
-                }
-
+                #read_ident
                 #read
             }
         }
@@ -100,12 +108,7 @@ fn write_field((index, field): (usize, &syn::Field)) -> syn::Result<proc_macro2:
 
     let mut statements: Vec<proc_macro2::TokenStream> = Vec::new();
 
-    // Named fields could be out of order so the identifier has to be written to
-    // the payload. Since this is only meant to be written/read by
-    // derive(Serialize) generated code, it's possible (and probably smart) to
-    // remove the extra safety for performance. Have to benchmark the message
-    // passing later.
-    if is_named {
+    if cfg!(feature = "verification") && is_named {
         statements.push(quote! { payload.push(&stringify!(#field_ident).into()); });
     }
 
@@ -141,24 +144,26 @@ fn read_field(field: &syn::Field) -> syn::Result<proc_macro2::TokenStream> {
     let field_attrs = parse_attributes(field)?;
 
     let expanded = if field_ident.is_some() {
+        let read = if cfg!(feature = "verification") {
+            quote! {
+                fields
+                    .remove(stringify!(#field_ident))
+                    .ok_or(crate::port::ShareableError::BadPayload)?
+            }
+        } else {
+            quote! { payload.shift() }
+        };
+
         match field_attrs.repr {
             Repr::Raw => quote! {
-                #field_ident: fields
-                    .remove(stringify!(#field_ident))
-                    .ok_or(crate::port::ShareableError::BadPayload)?
-                    .into()
+                #field_ident: #read.into()
             },
             Repr::Serde => quote! {
-                #field_ident: serde_wasm_bindgen::from_value(fields
-                    .remove(stringify!(#field_ident))
-                    .ok_or(crate::port::ShareableError::BadPayload)?
-                ).map_err(|_| crate::port::ShareableError::BadPayload)?
+                #field_ident: serde_wasm_bindgen::from_value(#read)
+                    .map_err(|_| crate::port::ShareableError::BadPayload)?
             },
             Repr::Shareable => quote! {
-                #field_ident: fields
-                    .remove(stringify!(#field_ident))
-                    .ok_or(crate::port::ShareableError::BadPayload)?
-                    .try_into()?
+                #field_ident: #read.try_into()?
             },
         }
     } else {
@@ -228,18 +233,22 @@ fn read_fields_named(
         .map(read_field)
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
-    let read = quote! {std::result::Result::Ok({
-        let mut fields = std::collections::HashMap::<String, JsValue>::new();
-        for _ in 0..#field_count {
-            let field_name = payload
-                .shift()
-                .as_string()
-                .ok_or(crate::port::ShareableError::BadPayload)?;
-            fields.insert(field_name, payload.shift());
-        }
+    let read = if cfg!(feature = "verification") {
+        quote! {std::result::Result::Ok({
+            let mut fields = std::collections::HashMap::<String, JsValue>::new();
+            for _ in 0..#field_count {
+                let field_name = payload
+                    .shift()
+                    .as_string()
+                    .ok_or(crate::port::ShareableError::BadPayload)?;
+                fields.insert(field_name, payload.shift());
+            }
 
-        #structure_ident { #(#read_fields,)* }
-    })};
+            #structure_ident { #(#read_fields,)* }
+        })}
+    } else {
+        quote! {std::result::Result::Ok(#structure_ident { #(#read_fields,)* })}
+    };
     Ok(read)
 }
 

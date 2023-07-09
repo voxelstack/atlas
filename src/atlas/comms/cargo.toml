@@ -43,3 +43,4 @@ wasm-bindgen-test = "0.3.37"
 
 [features]
 loggers = ["dep:console_log", "dep:fern", "dep:humantime"]
+verification = ["atlas-comms-derive/verification"]

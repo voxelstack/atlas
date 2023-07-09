@@ -44,8 +44,6 @@ pub fn init_output() {
 
 #[cfg(test)]
 mod tests {
-    use crate::port::ShareableError;
-
     use super::*;
     use atlas_comms_derive::Shareable;
     use std::fmt::Debug;
@@ -573,6 +571,7 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    #[cfg(feature = "verification")]
     fn incompatible_type() {
         let (data, _) = PlainEnum::Ping.try_into().unwrap();
         let recovered: Result<PlainStruct, _> = data.try_into();
