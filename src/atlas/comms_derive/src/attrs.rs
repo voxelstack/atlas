@@ -22,8 +22,7 @@ const INVALID_FORMAT: &str =
 const INVALID_TOKEN: &str =
     "unexpected token, expected comma separated list of ident = lit or ident";
 const INVALID_ATTR: &str = "unexpected attribute, expected ident: repr or transfer";
-const INVALID_REPR_END: &str =
-    "unexpected end of attribute definition, expected: repr = \"<repr>\"";
+const INVALID_REPR_END: &str = "unexpected end of attribute definition, expected: repr = \"repr\"";
 const INVALID_REPR: &str = "invalid repr, expected literal: \"raw\", \"serde\", or \"shareable\"";
 const DUPLICATED_ATTR: &str = "unexpected attribute, attribute is already defined";
 
@@ -32,6 +31,7 @@ pub fn parse_attributes(field: &syn::Field) -> syn::Result<Attributes> {
         repr: None,
         transfer: None,
     };
+    let mut transfer_span: Option<proc_macro2::Span> = None;
 
     field
         .attrs
@@ -60,6 +60,7 @@ pub fn parse_attributes(field: &syn::Field) -> syn::Result<Attributes> {
                             if field_attrs.transfer.is_some() {
                                 return Err(syn::Error::new(ident.span(), DUPLICATED_ATTR));
                             }
+                            transfer_span = Some(ident.span());
                             field_attrs.transfer = Some(true)
                         }
                         "repr" => {
@@ -88,7 +89,15 @@ pub fn parse_attributes(field: &syn::Field) -> syn::Result<Attributes> {
         repr: field_attrs.repr.unwrap_or(Repr::Shareable),
         transfer: field_attrs.transfer.unwrap_or(false),
     };
-    Ok(field_attrs)
+
+    if field_attrs.transfer && field_attrs.repr != Repr::Raw {
+        Err(syn::Error::new(
+            transfer_span.unwrap(),
+            "invalid attribute, only repr = \"raw\" fields can be transferred",
+        ))
+    } else {
+        Ok(field_attrs)
+    }
 }
 
 fn parse_repr(

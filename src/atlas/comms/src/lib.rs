@@ -83,7 +83,7 @@ mod tests {
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_worker);
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum PlainEnum {
+    enum PlainEnum {
         Ping,
     }
 
@@ -110,10 +110,13 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum TupleEnum {
+    enum TupleEnum {
         Ping,
-        Attach(OffscreenCanvas),
-        Wrap(Worker, OffscreenCanvas),
+        Attach(#[shareable(repr = "raw")] OffscreenCanvas),
+        Wrap(
+            #[shareable(repr = "raw")] Worker,
+            #[shareable(repr = "raw")] OffscreenCanvas,
+        ),
     }
 
     #[wasm_bindgen_test]
@@ -130,9 +133,11 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum StructEnum {
+    enum StructEnum {
         Wrap {
+            #[shareable(repr = "raw")]
             server: OffscreenCanvas,
+            #[shareable(repr = "raw")]
             surface: OffscreenCanvas,
         },
     }
@@ -162,11 +167,12 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum AttrEnum {
-        Draw(#[shareable(transfer)] OffscreenCanvas),
+    enum AttrEnum {
+        Draw(#[shareable(repr = "raw", transfer)] OffscreenCanvas),
         Wrap {
+            #[shareable(repr = "raw")]
             server: OffscreenCanvas,
-            #[shareable(transfer)]
+            #[shareable(repr = "raw", transfer)]
             surface: OffscreenCanvas,
         },
     }
@@ -200,7 +206,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct PlainStruct;
+    struct PlainStruct;
 
     #[wasm_bindgen_test]
     fn plain_struct() {
@@ -215,7 +221,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct TupleStruct(OffscreenCanvas);
+    struct TupleStruct(#[shareable(repr = "raw")] OffscreenCanvas);
 
     #[wasm_bindgen_test]
     fn tuple_struct() {
@@ -231,8 +237,10 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct StructStruct {
+    struct StructStruct {
+        #[shareable(repr = "raw")]
         worker: OffscreenCanvas,
+        #[shareable(repr = "raw")]
         canvas: OffscreenCanvas,
     }
 
@@ -261,7 +269,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct AttrTupleStruct(#[shareable(transfer)] OffscreenCanvas);
+    struct AttrTupleStruct(#[shareable(repr = "raw", transfer)] OffscreenCanvas);
 
     #[wasm_bindgen_test]
     fn attr_tuple_struct() {
@@ -275,9 +283,10 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct AttrStructStruct {
+    struct AttrStructStruct {
+        #[shareable(repr = "raw")]
         worker: OffscreenCanvas,
-        #[shareable(transfer)]
+        #[shareable(repr = "raw", transfer)]
         canvas: OffscreenCanvas,
     }
 
@@ -299,7 +308,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum SerdeTupleEnum {
+    enum SerdeTupleEnum {
         Message(
             #[shareable(repr = "serde")] String,
             #[shareable(repr = "serde")] Option<u32>,
@@ -323,7 +332,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub enum SerdeStructEnum {
+    enum SerdeStructEnum {
         Message {
             #[shareable(repr = "serde")]
             key: String,
@@ -356,10 +365,10 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct SerdeTupleStruct(
+    struct SerdeTupleStruct(
         #[shareable(repr = "serde")] String,
         #[shareable(repr = "serde")] Option<u32>,
-        OffscreenCanvas,
+        #[shareable(repr = "raw")] OffscreenCanvas,
     );
 
     #[wasm_bindgen_test]
@@ -380,7 +389,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct SerdeStructStruct {
+    struct SerdeStructStruct {
         #[shareable(repr = "serde")]
         key: String,
         #[shareable(repr = "serde")]
@@ -410,10 +419,11 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq, Eq, Shareable)]
-    pub struct Generic<T>
+    struct Generic<T>
     where
         T: Into<JsValue> + From<JsValue> + Debug,
     {
+        #[shareable(repr = "raw")]
         value: T,
     }
 
@@ -430,6 +440,148 @@ mod tests {
         let recovered = recovered.unwrap();
 
         assert_eq!(recovered, Generic { value });
+        assert_eq!(transfer, None);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    struct Child {
+        #[shareable(repr = "serde")]
+        id: String,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    enum Parent {
+        Ping,
+        Attach(Child),
+    }
+
+    #[wasm_bindgen_test]
+    fn nested() {
+        let (data, _) = Parent::Attach(Child {
+            id: "surface".into(),
+        })
+        .into();
+        let recovered: Result<Parent, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            Parent::Attach(Child {
+                id: "surface".into(),
+            })
+        );
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    struct ChildTransfer {
+        #[shareable(repr = "serde")]
+        id: String,
+        #[shareable(repr = "raw", transfer)]
+        canvas: OffscreenCanvas,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    enum ParentTransfer {
+        Ping,
+        Attach(ChildTransfer),
+        Transfer(
+            ChildTransfer,
+            #[shareable(repr = "raw", transfer)] OffscreenCanvas,
+        ),
+    }
+
+    #[wasm_bindgen_test]
+    fn nested_transfer() {
+        let value = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = ParentTransfer::Attach(ChildTransfer {
+            id: "surface".into(),
+            canvas: value.clone(),
+        })
+        .into();
+        let recovered: Result<ParentTransfer, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            ParentTransfer::Attach(ChildTransfer {
+                id: "surface".into(),
+                canvas: value.clone()
+            })
+        );
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value);
+    }
+
+    #[wasm_bindgen_test]
+    fn nested_transfer_multiple() {
+        let value_a = OffscreenCanvas::new(0, 0).unwrap();
+        let value_b = OffscreenCanvas::new(0, 0).unwrap();
+        let (data, transfer) = ParentTransfer::Transfer(
+            ChildTransfer {
+                id: "surface".into(),
+                canvas: value_a.clone(),
+            },
+            value_b.clone(),
+        )
+        .into();
+        let recovered: Result<ParentTransfer, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            ParentTransfer::Transfer(
+                ChildTransfer {
+                    id: "surface".into(),
+                    canvas: value_a.clone()
+                },
+                value_b.clone()
+            )
+        );
+        assert!(transfer.is_some());
+        let transfer: js_sys::Array = transfer.unwrap().into();
+        let recovered: OffscreenCanvas = transfer.get(0).into();
+        assert_eq!(recovered, value_a);
+        let recovered: OffscreenCanvas = transfer.get(1).into();
+        assert_eq!(recovered, value_b);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Shareable)]
+    struct ParentGeneric<T>
+    where
+        T: Shareable,
+    {
+        value: T,
+    }
+
+    #[wasm_bindgen_test]
+    fn nested_generic() {
+        let (data, transfer) = ParentGeneric {
+            value: Child {
+                id: "surface".into(),
+            },
+        }
+        .into();
+        let recovered: Result<ParentGeneric<Child>, _> = data.try_into();
+
+        assert!(recovered.is_ok());
+        let recovered = recovered.unwrap();
+
+        assert_eq!(
+            recovered,
+            ParentGeneric {
+                value: Child {
+                    id: "surface".into()
+                }
+            }
+        );
         assert_eq!(transfer, None);
     }
 }

@@ -65,6 +65,74 @@ fn unnamed_ident(i: usize, f: &syn::Field) -> syn::Ident {
     syn::Ident::new(&format!("field{}", i), span)
 }
 
+fn write_field((index, field): (usize, &syn::Field)) -> syn::Result<proc_macro2::TokenStream> {
+    let is_named = field.ident.is_some();
+    let field_ident = field.ident.clone().unwrap_or(unnamed_ident(index, field));
+    let field_attrs = parse_attributes(field)?;
+
+    let mut statements: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    // Named fields could be out of order so the identifier has to be written to
+    // the payload. Since this is only meant to be written/read by
+    // derive(Serialize) generated code, it's possible (and probably smart) to
+    // remove the extra safety for performance. Have to benchmark the message
+    // passing later.
+    if is_named {
+        statements.push(quote! { payload.push(&stringify!(#field_ident).into()); });
+    }
+
+    match field_attrs.repr {
+        Repr::Raw => {
+            if field_attrs.transfer {
+                statements.push(quote! { transfer.push(&#field_ident.clone().into()); });
+            }
+            statements.push(quote! { payload.push(&#field_ident.into()); });
+        }
+        Repr::Serde => statements
+            .push(quote! { payload.push(&serde_wasm_bindgen::to_value(&#field_ident).unwrap()); }),
+        Repr::Shareable => statements.push(quote! {
+            let (data, nested_transfer) = #field_ident.into();
+            match nested_transfer {
+                Some(nested_transfer) => {
+                    transfer = transfer.concat(&nested_transfer.into());
+                }
+                _ => (),
+            };
+            payload.push(&data);
+        }),
+    };
+
+    Ok(quote! { #(#statements)* })
+}
+
+fn read_field(field: &syn::Field) -> syn::Result<proc_macro2::TokenStream> {
+    let field_ident = &field.ident;
+    let field_attrs = parse_attributes(field)?;
+
+    let expanded = if field_ident.is_some() {
+        match field_attrs.repr {
+            Repr::Raw => quote! {
+                #field_ident: fields.remove(stringify!(#field_ident)).unwrap().into()
+            },
+            Repr::Serde => quote! {
+                #field_ident: serde_wasm_bindgen::from_value(
+                    fields.remove(stringify!(#field_ident)).unwrap()
+                ).unwrap()
+            },
+            Repr::Shareable => quote! {
+                #field_ident: fields.remove(stringify!(#field_ident)).unwrap().try_into()?
+            },
+        }
+    } else {
+        match field_attrs.repr {
+            Repr::Raw => quote! { payload.shift().into() },
+            Repr::Serde => quote! { serde_wasm_bindgen::from_value(payload.shift()).unwrap() },
+            Repr::Shareable => quote! { payload.shift().try_into()? },
+        }
+    };
+    Ok(expanded)
+}
+
 fn list_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
     let field_names: Box<dyn Iterator<Item = proc_macro2::TokenStream>> = match &fields {
         syn::Fields::Named(ref fields_named) => Box::new(fields_named.named.iter().map(|f| {
@@ -87,35 +155,8 @@ fn write_fields_named(fields_named: &syn::FieldsNamed) -> syn::Result<proc_macro
     let write_fields = fields_named
         .named
         .iter()
-        .map(|f| {
-            let field_ident = &f.ident;
-            let field_attrs = parse_attributes(f)?;
-
-            let write_field = match field_attrs.repr {
-                Repr::Raw | Repr::Shareable => {
-                    let write = quote! {
-                        payload.push(&stringify!(#field_ident).into());
-                        payload.push(&#field_ident.into());
-                    };
-
-                    if field_attrs.transfer {
-                        quote! {
-                            transfer.push(#field_ident.clone().into());
-                            #write
-                        }
-                    } else {
-                        write
-                    }
-                }
-                Repr::Serde => quote! {
-                    payload.push(&stringify!(#field_ident).into());
-                    payload.push(&serde_wasm_bindgen::to_value(&#field_ident).unwrap());
-                },
-                // Repr::Shareable => todo!(),
-            };
-
-            Ok(write_field)
-        })
+        .enumerate()
+        .map(write_field)
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     Ok(quote! { #(#write_fields)* })
@@ -128,31 +169,7 @@ fn write_fields_unnamed(
         .unnamed
         .iter()
         .enumerate()
-        .map(|(i, f)| {
-            let field_ident = unnamed_ident(i, f);
-            let field_attrs = parse_attributes(f)?;
-
-            let write_field = match field_attrs.repr {
-                Repr::Raw | Repr::Shareable => {
-                    let write = quote! { payload.push(&#field_ident.into()); };
-
-                    if field_attrs.transfer {
-                        quote! {
-                            transfer.push(#field_ident.clone().into());
-                            #write
-                        }
-                    } else {
-                        write
-                    }
-                }
-                Repr::Serde => quote! {
-                    payload.push(&serde_wasm_bindgen::to_value(&#field_ident).unwrap());
-                },
-                // Repr::Shareable => todo!(),
-            };
-
-            Ok(write_field)
-        })
+        .map(write_field)
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     Ok(quote! { #(#write_fields)* })
@@ -166,24 +183,7 @@ fn read_fields_named(
     let read_fields = fields_named
         .named
         .iter()
-        .map(|f| {
-            let field_ident = &f.ident;
-            let field_attrs = parse_attributes(f)?;
-
-            let read_field = match field_attrs.repr {
-                Repr::Raw | Repr::Shareable => quote! {
-                    #field_ident: fields.remove(stringify!(#field_ident)).unwrap().into()
-                },
-                Repr::Serde => quote! {
-                    #field_ident: serde_wasm_bindgen::from_value(
-                        fields.remove(stringify!(#field_ident)).unwrap()
-                    ).unwrap()
-                },
-                // Repr::Shareable => todo!(),
-            };
-
-            Ok(read_field)
-        })
+        .map(read_field)
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let read = quote! {std::result::Result::Ok({
@@ -195,7 +195,6 @@ fn read_fields_named(
 
         #structure_ident { #(#read_fields,)* }
     })};
-
     Ok(read)
 }
 
@@ -206,23 +205,12 @@ fn read_fields_unnamed(
     let read_fields = fields_unnamed
         .unnamed
         .iter()
-        .map(|f| {
-            let field_attrs = parse_attributes(f)?;
-
-            let read_field = match field_attrs.repr {
-                Repr::Raw | Repr::Shareable => quote! { payload.shift().into() },
-                Repr::Serde => quote! { serde_wasm_bindgen::from_value(payload.shift()).unwrap() },
-                // Repr::Shareable => todo!(),
-            };
-
-            Ok(read_field)
-        })
+        .map(read_field)
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let read = quote! {std::result::Result::Ok(
-        #structure_ident(#(#read_fields,)*
-    ))};
-
+        #structure_ident(#(#read_fields,)*)
+    )};
     Ok(read)
 }
 
@@ -247,18 +235,13 @@ fn write_shareable_struct(
 
     let write = quote! {
         let payload = js_sys::Array::new();
-        let mut transfer: std::vec::Vec<JsValue> = std::vec::Vec::new();
+        let mut transfer = js_sys::Array::new();
 
         #destructure
         #write_fields
 
-        let transfer = if transfer.len() > 0 {
-            let js_transfer = js_sys::Array::new_with_length(transfer.len().try_into().unwrap());
-            for (i, t) in transfer.into_iter().enumerate() {
-                js_transfer.set(i.try_into().unwrap(), t);
-            }
-
-            std::option::Option::Some(js_transfer.into())
+        let transfer = if transfer.length() > 0 {
+            std::option::Option::Some(transfer.into())
         } else {
             std::option::Option::None
         };
@@ -335,19 +318,14 @@ fn write_shareable_enum(
 
     let write = quote! {
         let payload = js_sys::Array::new();
-        let mut transfer: std::vec::Vec<JsValue> = std::vec::Vec::new();
+        let mut transfer = js_sys::Array::new();
 
         match self {
             #(#write_variants,)*
         };
 
-        let transfer = if transfer.len() > 0 {
-            let js_transfer = js_sys::Array::new_with_length(transfer.len().try_into().unwrap());
-            for (i, t) in transfer.into_iter().enumerate() {
-                js_transfer.set(i.try_into().unwrap(), t);
-            }
-
-            std::option::Option::Some(js_transfer.into())
+        let transfer = if transfer.length() > 0 {
+            std::option::Option::Some(transfer.into())
         } else {
             std::option::Option::None
         };
