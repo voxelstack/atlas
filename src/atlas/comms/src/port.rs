@@ -79,7 +79,9 @@ impl<'a> Drop for Listener<'a> {
 // TODO Reconsider the + Debug bound, right now it's there so I can unwrap tokio
 //  channel errors.
 pub trait Shareable:
-    Into<(JsValue, Option<JsValue>)> + TryFrom<JsValue, Error = ShareableError> + Debug
+    TryInto<(JsValue, Option<JsValue>), Error = ShareableError>
+    + TryFrom<JsValue, Error = ShareableError>
+    + Debug
 {
 }
 
@@ -120,7 +122,7 @@ impl Port {
     where
         M: Shareable,
     {
-        let (data, transfer) = message.into();
+        let (data, transfer) = message.try_into().unwrap();
         match transfer {
             Some(transfer) => self.0.transfer_raw(data, transfer),
             None => self.0.send_raw(data),

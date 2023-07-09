@@ -61,7 +61,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn plain_enum() {
-        let (data, transfer) = PlainEnum::Ping.into();
+        let (data, transfer) = PlainEnum::Ping.try_into().unwrap();
         let recovered: Result<PlainEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -95,7 +95,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn value_enum() {
         let value = OffscreenCanvas::new(0, 0).unwrap();
-        let (data, transfer) = TupleEnum::Attach(value.clone()).into();
+        let (data, transfer) = TupleEnum::Attach(value.clone()).try_into().unwrap();
         let recovered: Result<TupleEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -123,7 +123,8 @@ mod tests {
             server: value_a.clone(),
             surface: value_b.clone(),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<StructEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -153,7 +154,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn attr_enum_tuple() {
         let value_a = OffscreenCanvas::new(0, 0).unwrap();
-        let (_, transfer) = AttrEnum::Draw(value_a.clone()).into();
+        let (_, transfer) = AttrEnum::Draw(value_a.clone()).try_into().unwrap();
 
         assert!(transfer.is_some());
         let transfer: js_sys::Array = transfer.unwrap().into();
@@ -170,7 +171,8 @@ mod tests {
             server: value_a.clone(),
             surface: value_b.clone(),
         }
-        .into();
+        .try_into()
+        .unwrap();
 
         assert!(transfer.is_some());
         let transfer: js_sys::Array = transfer.unwrap().into();
@@ -183,7 +185,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn plain_struct() {
-        let (data, transfer) = PlainStruct.into();
+        let (data, transfer) = PlainStruct.try_into().unwrap();
         let recovered: Result<PlainStruct, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -199,7 +201,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn tuple_struct() {
         let value = OffscreenCanvas::new(0, 0).unwrap();
-        let (data, transfer) = TupleStruct(value.clone()).into();
+        let (data, transfer) = TupleStruct(value.clone()).try_into().unwrap();
         let recovered: Result<TupleStruct, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -225,7 +227,8 @@ mod tests {
             worker: value_a.clone(),
             canvas: value_b.clone(),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<StructStruct, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -247,7 +250,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn attr_tuple_struct() {
         let value_a = OffscreenCanvas::new(0, 0).unwrap();
-        let (_, transfer) = AttrTupleStruct(value_a.clone()).into();
+        let (_, transfer) = AttrTupleStruct(value_a.clone()).try_into().unwrap();
 
         assert!(transfer.is_some());
         let transfer: js_sys::Array = transfer.unwrap().into();
@@ -272,7 +275,8 @@ mod tests {
             worker: value_a.clone(),
             canvas: value_b.clone(),
         }
-        .into();
+        .try_into()
+        .unwrap();
 
         assert!(transfer.is_some());
         let transfer: js_sys::Array = transfer.unwrap().into();
@@ -291,7 +295,9 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn serde_tuple_enum() {
-        let (data, transfer) = SerdeTupleEnum::Message("voxelstack.me".into(), Some(314)).into();
+        let (data, transfer) = SerdeTupleEnum::Message("voxelstack.me".into(), Some(314))
+            .try_into()
+            .unwrap();
         let recovered: Result<SerdeTupleEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -321,7 +327,8 @@ mod tests {
             key: "voxelstack.me".into(),
             value: Some(314),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<SerdeStructEnum, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -347,8 +354,9 @@ mod tests {
     #[wasm_bindgen_test]
     fn serde_tuple_struct() {
         let value_a = OffscreenCanvas::new(0, 0).unwrap();
-        let (data, transfer) =
-            SerdeTupleStruct("voxelstack.me".into(), Some(314), value_a.clone()).into();
+        let (data, transfer) = SerdeTupleStruct("voxelstack.me".into(), Some(314), value_a.clone())
+            .try_into()
+            .unwrap();
         let recovered: Result<SerdeTupleStruct, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -375,7 +383,8 @@ mod tests {
             key: "voxelstack.me".into(),
             value: Some(314),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<SerdeStructStruct, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -406,7 +415,8 @@ mod tests {
         let (data, transfer) = Generic {
             value: value.clone(),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<Generic<OffscreenCanvas>, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -433,7 +443,8 @@ mod tests {
         let (data, _) = Parent::Attach(Child {
             id: "surface".into(),
         })
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<Parent, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -472,7 +483,8 @@ mod tests {
             id: "surface".into(),
             canvas: value.clone(),
         })
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<ParentTransfer, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -502,7 +514,8 @@ mod tests {
             },
             value_b.clone(),
         )
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<ParentTransfer, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -541,7 +554,8 @@ mod tests {
                 id: "surface".into(),
             },
         }
-        .into();
+        .try_into()
+        .unwrap();
         let recovered: Result<ParentGeneric<Child>, _> = data.try_into();
 
         assert!(recovered.is_ok());
@@ -560,7 +574,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn incompatible_type() {
-        let (data, _) = PlainEnum::Ping.into();
+        let (data, _) = PlainEnum::Ping.try_into().unwrap();
         let recovered: Result<PlainStruct, _> = data.try_into();
 
         assert!(recovered.is_err());

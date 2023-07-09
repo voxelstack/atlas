@@ -25,13 +25,18 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
     let (impl_generics, ty_generics, where_clause) = &ast.generics.split_for_impl();
     let expanded = quote! {
         impl #impl_generics
-            core::convert::Into<(
+            core::convert::TryInto<(
                 wasm_bindgen::JsValue,
                 std::option::Option<wasm_bindgen::JsValue>
             )> for #shareable_ident #ty_generics
             #where_clause
         {
-            fn into(self) -> (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>) {
+            type Error = crate::port::ShareableError;
+
+            fn try_into(self) -> Result<
+                (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>),
+                Self::Error
+            > {
                 let payload = js_sys::Array::new();
                 let mut transfer = js_sys::Array::new();
 
@@ -45,7 +50,7 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
                     std::option::Option::None
                 };
 
-                (payload.into(), transfer)
+                Ok((payload.into(), transfer))
             }
         }
 
@@ -111,10 +116,13 @@ fn write_field((index, field): (usize, &syn::Field)) -> syn::Result<proc_macro2:
             }
             statements.push(quote! { payload.push(&#field_ident.into()); });
         }
-        Repr::Serde => statements
-            .push(quote! { payload.push(&serde_wasm_bindgen::to_value(&#field_ident).unwrap()); }),
+        Repr::Serde => statements.push(
+            quote! { payload.push(&serde_wasm_bindgen::to_value(&#field_ident)
+                .map_err(|_| crate::port::ShareableError::SerdeFailure)?);
+            },
+        ),
         Repr::Shareable => statements.push(quote! {
-            let (data, nested_transfer) = #field_ident.into();
+            let (data, nested_transfer) = #field_ident.try_into()?;
             match nested_transfer {
                 Some(nested_transfer) => {
                     transfer = transfer.concat(&nested_transfer.into());
