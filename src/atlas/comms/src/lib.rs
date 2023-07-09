@@ -1,4 +1,5 @@
-use port::{Shareable, ShareableError};
+use atlas_comms_derive::Shareable;
+use port::Shareable;
 use std::panic;
 use wasm_bindgen::prelude::*;
 
@@ -6,46 +7,15 @@ pub mod client;
 pub mod port;
 pub mod server;
 
-#[derive(Debug)]
+#[derive(Debug, Shareable)]
 pub struct Payload<T>
 where
     T: Shareable,
 {
-    pub id: js_sys::Number,
+    #[shareable(repr = "serde")]
+    pub id: u8,
     pub message: T,
 }
-
-impl<T> Into<(JsValue, Option<JsValue>)> for Payload<T>
-where
-    T: Shareable,
-{
-    fn into(self) -> (JsValue, Option<JsValue>) {
-        let payload = js_sys::Array::new_with_length(2);
-        let (data, transfer) = self.message.into();
-        payload.set(0, JsValue::from(self.id));
-        payload.set(1, data);
-
-        (payload.into(), transfer)
-    }
-}
-impl<T> TryFrom<JsValue> for Payload<T>
-where
-    T: Shareable,
-{
-    type Error = ShareableError;
-
-    fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        let value: js_sys::Array = value.into();
-        let id: js_sys::Number = value.get(0).into();
-        let message = value.get(1);
-
-        Ok(Self {
-            id,
-            message: message.try_into()?,
-        })
-    }
-}
-impl<T> Shareable for Payload<T> where T: Shareable {}
 
 #[wasm_bindgen(js_name = initOutput)]
 pub fn init_output() {

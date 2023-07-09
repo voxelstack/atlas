@@ -32,16 +32,15 @@ impl AtlasClient {
 
     async fn request(&self, message: ClientMessage) -> ServerResponse {
         let (tx, mut rx) = channel::<ServerResponse>(1);
-        let id = js_sys::Number::from(rand::random::<u8>());
+        let id: u8 = rand::random();
 
-        let id_clone = id.clone();
         let listener = self
             .port
             .add_listener(Closure::new(move |event: MessageEvent| {
                 let payload: Payload<ServerResponse> = event.data().try_into().unwrap();
                 trace!("client got back: {:?}", payload);
 
-                if payload.id == id_clone {
+                if payload.id == id {
                     tx.try_send(payload.message)
                         .expect("Request channel should not be closed.");
                 }
