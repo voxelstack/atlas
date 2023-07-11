@@ -577,6 +577,6 @@ mod tests {
         let recovered: Result<PlainStruct, _> = data.try_into();
 
         assert!(recovered.is_err());
-        assert_eq!(recovered, Err(ShareableError::IncompatibleType));
+        assert_eq!(recovered, Err(port::ShareableError::IncompatibleType));
     }
 }

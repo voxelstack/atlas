@@ -14,7 +14,7 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
         syn::Data::Union(_) => Err(syn::Error::new(ast.span(), UNSUPPORTED_UNION)),
     }?;
     let write_ident = if cfg!(feature = "verification") {
-        quote! { payload.push(&stringify!(#shareable_ident).into()); }
+        quote! { __payload.push(&stringify!(#shareable_ident).into()); }
     } else {
         quote! {}
     };
@@ -26,12 +26,12 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
     }?;
     let read_ident = if cfg!(feature = "verification") {
         quote! {
-            let ident = payload
+            let __ident = __payload
                 .shift()
                 .as_string()
                 .ok_or(crate::port::ShareableError::BadPayload)?;
-            if ident != stringify!(#shareable_ident) {
-                return std::result::Result::Err(crate::port::ShareableError::IncompatibleType);
+            if __ident != stringify!(#shareable_ident) {
+                return::std::result::Result::Err(crate::port::ShareableError::IncompatibleType);
             }
         }
     } else {
@@ -41,42 +41,42 @@ pub fn expand_derive_shareable(ast: &syn::DeriveInput) -> syn::Result<proc_macro
     let (impl_generics, ty_generics, where_clause) = &ast.generics.split_for_impl();
     let expanded = quote! {
         impl #impl_generics
-            core::convert::TryInto<(
+            ::core::convert::TryInto<(
                 wasm_bindgen::JsValue,
-                std::option::Option<wasm_bindgen::JsValue>
+                ::std::option::Option<wasm_bindgen::JsValue>
             )> for #shareable_ident #ty_generics
             #where_clause
         {
             type Error = crate::port::ShareableError;
 
             fn try_into(self) -> Result<
-                (wasm_bindgen::JsValue, std::option::Option<wasm_bindgen::JsValue>),
+                (wasm_bindgen::JsValue, ::std::option::Option<wasm_bindgen::JsValue>),
                 Self::Error
             > {
-                let payload = js_sys::Array::new();
-                let mut transfer = js_sys::Array::new();
+                let __payload = js_sys::Array::new();
+                let mut __transfer = js_sys::Array::new();
 
                 #write_ident
                 #write
 
-                let transfer = if transfer.length() > 0 {
-                    std::option::Option::Some(transfer.into())
+                let __transfer = if __transfer.length() > 0 {
+                    ::std::option::Option::Some(__transfer.into())
                 } else {
-                    std::option::Option::None
+                    ::std::option::Option::None
                 };
 
-                Ok((payload.into(), transfer))
+                Ok((__payload.into(), __transfer))
             }
         }
 
         impl #impl_generics
-            core::convert::TryFrom<wasm_bindgen::JsValue> for #shareable_ident #ty_generics
+            ::core::convert::TryFrom<wasm_bindgen::JsValue> for #shareable_ident #ty_generics
             #where_clause
         {
             type Error = crate::port::ShareableError;
 
-            fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-                let payload: js_sys::Array = value.into();
+            fn try_from(value: JsValue) -> ::std::result::Result<Self, Self::Error> {
+                let __payload: js_sys::Array = value.into();
 
                 #read_ident
                 #read
@@ -109,30 +109,30 @@ fn write_field((index, field): (usize, &syn::Field)) -> syn::Result<proc_macro2:
     let mut statements: Vec<proc_macro2::TokenStream> = Vec::new();
 
     if cfg!(feature = "verification") && is_named {
-        statements.push(quote! { payload.push(&stringify!(#field_ident).into()); });
+        statements.push(quote! { __payload.push(&stringify!(#field_ident).into()); });
     }
 
     match field_attrs.repr {
         Repr::Raw => {
             if field_attrs.transfer {
-                statements.push(quote! { transfer.push(&#field_ident.clone().into()); });
+                statements.push(quote! { __transfer.push(&#field_ident.clone().into()); });
             }
-            statements.push(quote! { payload.push(&#field_ident.into()); });
+            statements.push(quote! { __payload.push(&#field_ident.into()); });
         }
         Repr::Serde => statements.push(
-            quote! { payload.push(&serde_wasm_bindgen::to_value(&#field_ident)
+            quote! { __payload.push(&serde_wasm_bindgen::to_value(&#field_ident)
                 .map_err(|_| crate::port::ShareableError::SerdeFailure)?);
             },
         ),
         Repr::Shareable => statements.push(quote! {
-            let (data, nested_transfer) = #field_ident.try_into()?;
-            match nested_transfer {
-                Some(nested_transfer) => {
-                    transfer = transfer.concat(&nested_transfer.into());
+            let (__data, __nested_transfer) = #field_ident.try_into()?;
+            match __nested_transfer {
+                ::std::option::Option::Some(__nested_transfer) => {
+                    __transfer = __transfer.concat(&__nested_transfer.into());
                 }
                 _ => (),
             };
-            payload.push(&data);
+            __payload.push(&__data);
         }),
     };
 
@@ -146,12 +146,12 @@ fn read_field(field: &syn::Field) -> syn::Result<proc_macro2::TokenStream> {
     let expanded = if field_ident.is_some() {
         let read = if cfg!(feature = "verification") {
             quote! {
-                fields
+                __fields
                     .remove(stringify!(#field_ident))
                     .ok_or(crate::port::ShareableError::BadPayload)?
             }
         } else {
-            quote! { payload.shift() }
+            quote! { __payload.shift() }
         };
 
         match field_attrs.repr {
@@ -168,13 +168,13 @@ fn read_field(field: &syn::Field) -> syn::Result<proc_macro2::TokenStream> {
         }
     } else {
         match field_attrs.repr {
-            Repr::Raw => quote! { payload.shift().into() },
+            Repr::Raw => quote! { __payload.shift().into() },
             Repr::Serde => {
-                quote! { serde_wasm_bindgen::from_value(payload.shift())
+                quote! { serde_wasm_bindgen::from_value(__payload.shift())
                     .map_err(|_| crate::port::ShareableError::BadPayload)?
                 }
             }
-            Repr::Shareable => quote! { payload.shift().try_into()? },
+            Repr::Shareable => quote! { __payload.shift().try_into()? },
         }
     };
     Ok(expanded)
@@ -234,20 +234,20 @@ fn read_fields_named(
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let read = if cfg!(feature = "verification") {
-        quote! {std::result::Result::Ok({
-            let mut fields = std::collections::HashMap::<String, JsValue>::new();
+        quote! {::std::result::Result::Ok({
+            let mut __fields =::std::collections::HashMap::<String, JsValue>::new();
             for _ in 0..#field_count {
-                let field_name = payload
+                let __field_name = __payload
                     .shift()
                     .as_string()
                     .ok_or(crate::port::ShareableError::BadPayload)?;
-                fields.insert(field_name, payload.shift());
+                __fields.insert(__field_name, __payload.shift());
             }
 
             #structure_ident { #(#read_fields,)* }
         })}
     } else {
-        quote! {std::result::Result::Ok(#structure_ident { #(#read_fields,)* })}
+        quote! {::std::result::Result::Ok(#structure_ident { #(#read_fields,)* })}
     };
     Ok(read)
 }
@@ -306,7 +306,7 @@ fn read_shareable_struct(
         syn::Fields::Unnamed(ref fields_unnamed) => {
             read_fields_unnamed(shareable_ident, fields_unnamed)?
         }
-        syn::Fields::Unit => quote! { std::result::Result::Ok(#shareable_ident) },
+        syn::Fields::Unit => quote! { ::std::result::Result::Ok(#shareable_ident) },
     };
 
     Ok(quote! { #make_struct })
@@ -329,7 +329,7 @@ fn write_shareable_enum(
                     let write_fields = write_fields_named(fields_named)?;
                     quote! {
                         #shareable_ident::#variant_ident{#list_fields} => {
-                            payload.push(&stringify!(#variant_ident).into());
+                            __payload.push(&stringify!(#variant_ident).into());
                             #write_fields
                         }
                     }
@@ -338,14 +338,14 @@ fn write_shareable_enum(
                     let write_fields = write_fields_unnamed(fields_unnamed)?;
                     quote! {
                         #shareable_ident::#variant_ident(#list_fields) => {
-                            payload.push(&stringify!(#variant_ident).into());
+                            __payload.push(&stringify!(#variant_ident).into());
                             #write_fields
                         }
                     }
                 }
                 syn::Fields::Unit => quote! {
                     #shareable_ident::#variant_ident => {
-                        payload.push(&stringify!(#variant_ident).into());
+                        __payload.push(&stringify!(#variant_ident).into());
                     }
                 },
             };
@@ -383,7 +383,7 @@ fn read_shareable_enum(
                     read_fields_unnamed(&entry_ident, fields_unnamed)?
                 }
                 syn::Fields::Unit => {
-                    quote! { std::result::Result::Ok(#shareable_ident::#variant_ident) }
+                    quote! {::std::result::Result::Ok(#shareable_ident::#variant_ident) }
                 }
             };
 
@@ -393,14 +393,14 @@ fn read_shareable_enum(
         .collect::<syn::Result<Vec<proc_macro2::TokenStream>>>()?;
 
     let read = quote! {
-        let variant_ident = payload
+        let variant_ident = __payload
             .shift()
             .as_string()
             .ok_or(crate::port::ShareableError::BadPayload)?;
 
         match variant_ident.as_ref() {
             #(#read_variants,)*
-            _ => std::result::Result::Err(crate::port::ShareableError::BadPayload)
+            _ =>::std::result::Result::Err(crate::port::ShareableError::BadPayload)
         }
 
     };
