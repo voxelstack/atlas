@@ -16,3 +16,8 @@ pub enum ServerResponse {
     Ok(ServerMessage),
     Err(ServerError),
 }
+
+#[derive(Debug, Shareable)]
+pub enum ServerEvent {
+    Count(#[shareable(repr = "serde")] u8),
+}

@@ -1,13 +1,14 @@
 use std::fmt::{self, Debug};
 
 use wasm_bindgen::prelude::*;
-use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker};
+use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort, Worker};
 
 pub trait RawPort {
     fn send_raw(&self, message: JsValue);
     fn transfer_raw(&self, message: JsValue, transfer: JsValue);
     fn add_raw_listener(&self, listener: &js_sys::Function);
     fn remove_raw_listener(&self, listener: &js_sys::Function);
+    fn start(&self) {}
 }
 
 impl RawPort for Worker {
@@ -51,6 +52,32 @@ impl RawPort for DedicatedWorkerGlobalScope {
     fn remove_raw_listener(&self, listener: &js_sys::Function) {
         self.remove_event_listener_with_callback("message", listener)
             .expect("Should have error handling.");
+    }
+}
+
+impl RawPort for MessagePort {
+    fn send_raw(&self, message: JsValue) {
+        self.post_message(&message)
+            .expect("Should have error handling.");
+    }
+
+    fn transfer_raw(&self, message: JsValue, transfer: JsValue) {
+        self.post_message_with_transferable(&message, &transfer)
+            .expect("Should have error handling.");
+    }
+
+    fn add_raw_listener(&self, listener: &js_sys::Function) {
+        self.add_event_listener_with_callback("message", listener)
+            .expect("Should have error handling.");
+    }
+
+    fn remove_raw_listener(&self, listener: &js_sys::Function) {
+        self.remove_event_listener_with_callback("message", listener)
+            .expect("Should have error handling.");
+    }
+
+    fn start(&self) {
+        self.start();
     }
 }
 
@@ -115,6 +142,7 @@ pub struct Port(Box<dyn RawPort>);
 
 impl Port {
     pub fn wrap(raw_port: Box<dyn RawPort>) -> Self {
+        raw_port.start();
         Self(raw_port)
     }
 
