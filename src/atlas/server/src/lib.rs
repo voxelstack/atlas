@@ -7,7 +7,7 @@ use atlas_comms::{
 use log::trace;
 use tokio::sync::mpsc::unbounded_channel;
 use wasm_bindgen::prelude::*;
-use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort};
+use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
 pub use atlas_comms::init_output;
 pub use wasm_bindgen_rayon::init_thread_pool;
