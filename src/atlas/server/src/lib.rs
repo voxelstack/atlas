@@ -47,16 +47,31 @@ impl AtlasServer {
 
             let Payload { id, message } = payload;
             let res = match message {
-                ClientMessage::Ping => {
+                ClientMessage::Ping => ServerResponse::Ok(ServerMessage::Ok),
+                ClientMessage::Query => {
                     if let Some(wire) = &self.wire {
                         wire.send(ServerEvent::Count(self.counter));
-                        self.counter += 1;
+                    }
+                    ServerResponse::Ok(ServerMessage::Ok)
+                }
+                ClientMessage::Inc => {
+                    self.counter += 1;
+
+                    if let Some(wire) = &self.wire {
+                        wire.send(ServerEvent::Count(self.counter));
+                    }
+                    ServerResponse::Ok(ServerMessage::Ok)
+                }
+                ClientMessage::Dec => {
+                    self.counter -= 1;
+
+                    if let Some(wire) = &self.wire {
+                        wire.send(ServerEvent::Count(self.counter));
                     }
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
                 ClientMessage::Attach(_) => ServerResponse::Err(ServerError::Unknown),
                 ClientMessage::WireUp(port) => {
-                    // let port: MessagePort = event.ports().get(0).into();
                     self.wire = Some(Port::wrap(Box::new(port)));
                     ServerResponse::Ok(ServerMessage::Ok)
                 }

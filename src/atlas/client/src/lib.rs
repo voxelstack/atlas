@@ -7,15 +7,15 @@ use atlas_comms::{
 use log::trace;
 use tokio::sync::mpsc::channel;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageChannel, MessageEvent, OffscreenCanvas, Worker};
+use web_sys::{BroadcastChannel, MessageChannel, MessageEvent, OffscreenCanvas, Worker};
 
 pub use atlas_comms::init_output;
 
 #[wasm_bindgen]
 pub struct AtlasClient {
     _server: Worker,
-    wire: Option<(Port, Listener<'static>)>,
     pipe: Port,
+    wire: Option<(Port, Listener<'static>)>,
 }
 
 #[wasm_bindgen]
@@ -39,6 +39,16 @@ impl AtlasClient {
             let handle = wire.add_listener(Closure::new(move |event: MessageEvent| {
                 let event: ServerEvent = event.data().try_into().unwrap();
                 trace!("[··wire]<-server: {:?}", event);
+
+                match event {
+                    ServerEvent::Count(value) => {
+                        // TODO Probably gonna want to reuse the channel for
+                        // multiple event types.
+                        let channel =
+                            BroadcastChannel::new(stringify!(ServerEvent::Count)).unwrap();
+                        channel.post_message(&value.into()).unwrap();
+                    }
+                };
             }));
 
             // From wasm_bindgen:
@@ -61,6 +71,18 @@ impl AtlasClient {
 
     pub async fn ping(&self) {
         self.request(ClientMessage::Ping).await;
+    }
+
+    pub async fn query(&self) {
+        self.request(ClientMessage::Query).await;
+    }
+
+    pub async fn inc(&self) {
+        self.request(ClientMessage::Inc).await;
+    }
+
+    pub async fn dec(&self) {
+        self.request(ClientMessage::Dec).await;
     }
 
     async fn request(&self, message: ClientMessage) -> ServerResponse {
@@ -86,5 +108,44 @@ impl AtlasClient {
         listener.clear();
 
         response
+    }
+
+    pub fn observe(&mut self, observable: &str) -> Observable {
+        Observable {
+            channel: BroadcastChannel::new(observable).unwrap(),
+            listeners: Vec::new(),
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub struct Observable {
+    channel: BroadcastChannel,
+    listeners: Vec<Closure<dyn Fn(MessageEvent)>>,
+}
+
+#[wasm_bindgen]
+impl Observable {
+    pub fn subscribe(&mut self, on_change: js_sys::Function) -> Result<JsValue, JsValue> {
+        let listener = Closure::<dyn Fn(MessageEvent)>::new(move |event: MessageEvent| {
+            on_change
+                .call1(&JsValue::undefined(), &event.data())
+                .unwrap();
+        });
+        self.channel
+            .add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())
+            .unwrap();
+        self.listeners.push(listener);
+
+        let listener = self.listeners.last().unwrap();
+        let listener_handle: &js_sys::Function = listener.as_ref().unchecked_ref();
+        let listener_handle = listener_handle.clone();
+        let channel_handle = self.channel.clone();
+        let unsubscribe = Closure::<dyn Fn()>::new(move || {
+            channel_handle
+                .remove_event_listener_with_callback("message", &listener_handle)
+                .unwrap();
+        });
+        Ok(unsubscribe.into_js_value())
     }
 }
