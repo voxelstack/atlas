@@ -11,11 +11,14 @@ use web_sys::{BroadcastChannel, MessageChannel, MessageEvent, OffscreenCanvas, W
 
 pub use atlas_comms::init_output;
 
+const BUS_PREFIX: &str = "atlas_bus";
+
 #[wasm_bindgen]
 pub struct AtlasClient {
     _server: Worker,
     pipe: Port,
     wire: Option<(Port, Listener<'static>)>,
+    bus_id: String,
 }
 
 #[wasm_bindgen]
@@ -26,6 +29,7 @@ impl AtlasClient {
             _server: server.clone(),
             wire: None,
             pipe: Port::wrap(Box::new(server)),
+            bus_id: format!("{}#{}", BUS_PREFIX, rand::random::<u8>()),
         }
     }
 
@@ -36,19 +40,26 @@ impl AtlasClient {
         let res = self.request(ClientMessage::WireUp(tx)).await;
         if let ServerResponse::Ok(ServerMessage::Ok) = res {
             let wire = Port::wrap(Box::new(rx));
+            let bus_id = self.bus_id.clone();
             let handle = wire.add_listener(Closure::new(move |event: MessageEvent| {
                 let event: ServerEvent = event.data().try_into().unwrap();
                 trace!("[··wire]<-server: {:?}", event);
 
+                let channel = BroadcastChannel::new(&bus_id).unwrap();
+
+                // TODO This shouldn't be manual.
+                // The event data should probably be generic over #[wasm_bindgen]
+                // structs so observables can subscribe with a function that
+                // receives a typed payload.
+                let payload = js_sys::Array::new();
                 match event {
                     ServerEvent::Count(value) => {
-                        // TODO Probably gonna want to reuse the channel for
-                        // multiple event types.
-                        let channel =
-                            BroadcastChannel::new(stringify!(ServerEvent::Count)).unwrap();
-                        channel.post_message(&value.into()).unwrap();
+                        payload.push(&JsValue::from(stringify!(ServerEvent::Count)));
+                        payload.push(&JsValue::from(value));
                     }
-                };
+                }
+
+                channel.post_message(&payload).unwrap();
             }));
 
             // From wasm_bindgen:
@@ -110,9 +121,10 @@ impl AtlasClient {
         response
     }
 
-    pub fn observe(&mut self, observable: &str) -> Observable {
+    pub fn observe(&mut self, observable: String) -> Observable {
         Observable {
-            channel: BroadcastChannel::new(observable).unwrap(),
+            id: observable,
+            channel: BroadcastChannel::new(&self.bus_id).unwrap(),
             listeners: Vec::new(),
         }
     }
@@ -120,6 +132,7 @@ impl AtlasClient {
 
 #[wasm_bindgen]
 pub struct Observable {
+    id: String,
     channel: BroadcastChannel,
     listeners: Vec<Closure<dyn Fn(MessageEvent)>>,
 }
@@ -127,10 +140,16 @@ pub struct Observable {
 #[wasm_bindgen]
 impl Observable {
     pub fn subscribe(&mut self, on_change: js_sys::Function) -> Result<JsValue, JsValue> {
+        let id = self.id.clone();
         let listener = Closure::<dyn Fn(MessageEvent)>::new(move |event: MessageEvent| {
-            on_change
-                .call1(&JsValue::undefined(), &event.data())
-                .unwrap();
+            let event: js_sys::Array = event.data().into();
+
+            let event_id = event.get(0).as_string().unwrap();
+            if event_id == id {
+                on_change
+                    .call1(&JsValue::undefined(), &event.get(1))
+                    .unwrap();
+            }
         });
         self.channel
             .add_event_listener_with_callback("message", listener.as_ref().unchecked_ref())

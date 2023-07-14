@@ -16,7 +16,7 @@ pub use wasm_bindgen_rayon::init_thread_pool;
 pub struct AtlasServer {
     _scope: DedicatedWorkerGlobalScope,
     counter: u8,
-    wire: Option<Port>,
+    wires: Vec<Port>,
     port: Port,
 }
 
@@ -27,7 +27,7 @@ impl AtlasServer {
         Self {
             _scope: scope.clone(),
             counter: 0,
-            wire: None,
+            wires: Vec::new(),
             port: Port::wrap(Box::new(scope)),
         }
     }
@@ -49,25 +49,19 @@ impl AtlasServer {
             let res = match message {
                 ClientMessage::Ping => ServerResponse::Ok(ServerMessage::Ok),
                 ClientMessage::Query => {
-                    if let Some(wire) = &self.wire {
-                        wire.send(ServerEvent::Count(self.counter));
-                    }
+                    self.push_event(ServerEvent::Count(self.counter));
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
                 ClientMessage::Inc => {
                     self.counter += 1;
 
-                    if let Some(wire) = &self.wire {
-                        wire.send(ServerEvent::Count(self.counter));
-                    }
+                    self.push_event(ServerEvent::Count(self.counter));
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
                 ClientMessage::Dec => {
                     self.counter -= 1;
 
-                    if let Some(wire) = &self.wire {
-                        wire.send(ServerEvent::Count(self.counter));
-                    }
+                    self.push_event(ServerEvent::Count(self.counter));
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
                 ClientMessage::Attach(surface) => {
@@ -75,7 +69,7 @@ impl AtlasServer {
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
                 ClientMessage::WireUp(port) => {
-                    self.wire = Some(Port::wrap(Box::new(port)));
+                    self.wires.push(Port::wrap(Box::new(port)));
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
             };
@@ -84,5 +78,11 @@ impl AtlasServer {
         }
 
         listener.clear();
+    }
+
+    fn push_event(&self, event: ServerEvent) {
+        for wire in &self.wires {
+            wire.send(event.clone());
+        }
     }
 }
