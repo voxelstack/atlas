@@ -1,7 +1,7 @@
 use atlas_comms::{
     client::ClientMessage,
     port::Port,
-    server::{ServerError, ServerEvent, ServerMessage, ServerResponse},
+    server::{ServerEvent, ServerMessage, ServerResponse},
     Payload,
 };
 use log::trace;
@@ -70,7 +70,10 @@ impl AtlasServer {
                     }
                     ServerResponse::Ok(ServerMessage::Ok)
                 }
-                ClientMessage::Attach(_) => ServerResponse::Err(ServerError::Unknown),
+                ClientMessage::Attach(surface) => {
+                    atlas_graphics::list_adapters(surface).await;
+                    ServerResponse::Ok(ServerMessage::Ok)
+                }
                 ClientMessage::WireUp(port) => {
                     self.wire = Some(Port::wrap(Box::new(port)));
                     ServerResponse::Ok(ServerMessage::Ok)

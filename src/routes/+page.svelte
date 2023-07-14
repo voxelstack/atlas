@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Worker from '../worker?worker';
+	import Worker from '../worker?worker&inline';
 	import init, { initOutput, AtlasClient, Observable } from '$atlas/client';
 	import spawn from '$lib/spawner';
 
@@ -22,6 +22,8 @@
 		await atlas.ping();
 		await atlas.listen();
 
+		await atlas.attach(surface.transferControlToOffscreen());
+
 		count = atlas.observe('ServerEvent :: Count');
 		unsubscribe = count.subscribe(logger);
 		await atlas.query();
@@ -38,7 +40,7 @@
 		</span>
 		<button on:click={() => atlas.inc()}>+</button>
 	</div>
-	
+
 	<button
 		on:click={() => {
 			unsubscribe?.();

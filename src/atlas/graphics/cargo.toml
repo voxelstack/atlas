@@ -1,0 +1,18 @@
+[package]
+name = "atlas-graphics"
+version = "0.1.0"
+authors = ["voxelstack <voxelstack@gmail.com>"]
+edition = "2021"
+description = "A wgpu render engine."
+repository = "https://github.com/voxelstack/dotme"
+license-file = "../../../LICENSE"
+
+[dependencies]
+log = "0.4.19"
+wgpu = "0.16.2"
+
+[dependencies.web-sys]
+version = "0.3.64"
+features = [
+    "OffscreenCanvas",
+]
