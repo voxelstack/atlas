@@ -1,4 +1,4 @@
-# .me
+# atlas
 
 **Still heavily WIP.**
 
